@@ -91,7 +91,9 @@ def headline(results: Path) -> str:
     floor = read(results, "latency_floor")
     e2e = floor or [r for r in end_to_end if r["payload_bytes"] == "64"]
     if e2e:
-        r = min(e2e, key=lambda row: float(row["p50_ns"]))
+        # Chosen by p99, not p50. The project's claim is about the tail, so the
+        # headline should be the operating point with the best tail.
+        r = min(e2e, key=lambda row: float(row["p99_ns"]))
         rows.append([
             ("End-to-end over TCP, 64 B, 1 pub / 1 sub, paced at "
              f"{int(r['target_rate']) // 1000}k msg/s"),
@@ -187,7 +189,7 @@ def tables(results: Path) -> str:
     present = [(f, t) for f, t in charts if (results / f).exists()]
     if present:
         rel = results.relative_to(REPO)
-        out.append("Charts, all drawn from the CSVs in this directory by "
+        out.append(f"Charts, all drawn from the CSVs in `{rel}/` by "
                    "`scripts/plot_latency.py`:\n\n" +
                    "\n".join(f"* [{title}]({rel}/{name})" for name, title in present))
 

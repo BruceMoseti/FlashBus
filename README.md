@@ -301,7 +301,7 @@ Measured on Intel(R) Xeon(R) Processor (8 logical), Linux x86_64 / Ubuntu 24.04.
 
 | What | Measured |
 | --- | --- |
-| End-to-end over TCP, 64 B, 1 pub / 1 sub, paced at 50k msg/s | p50 **11.71 us**, p99 **14.14 us**, p99.9 23.04 us, 0 dropped |
+| End-to-end over TCP, 64 B, 1 pub / 1 sub, paced at 100k msg/s | p50 **11.84 us**, p99 **13.89 us**, p99.9 17.28 us, 0 dropped |
 | SPSC ring handoff, 64 B slots, paced below saturation | p50 **0.41 us**, p99 **0.46 us** (mutex baseline: p50 2.54 us, p99 7.39 us) |
 | SPSC ring throughput, 64 B slots, saturated | **15.11 M msg/s** (mutex baseline: 7.18 M msg/s) |
 | Broker throughput ceiling, 64 B, zero loss | **5.19 M msg/s** delivered (2 publishers, 8 frames per write()) |
@@ -310,7 +310,7 @@ Measured on Intel(R) Xeon(R) Processor (8 logical), Linux x86_64 / Ubuntu 24.04.
 <!-- RESULTS:END -->
 
 <!-- RESULTS:TABLES -->
-Charts, all drawn from the CSVs in this directory by `scripts/plot_latency.py`:
+Charts, all drawn from the CSVs in `results/latest/` by `scripts/plot_latency.py`:
 
 * [Overload behaviour](results/latest/overload.png)
 * [Queue handoff latency by percentile](results/latest/queue_latency.png)
