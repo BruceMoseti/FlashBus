@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <cstring>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <thread>
@@ -42,6 +43,7 @@ struct Options {
   unsigned idle_spin_us = 500;
   unsigned idle_sleep_us = 50;
   std::string csv;
+  std::string histogram;
   std::string variant = "tcp-end-to-end";
 };
 
@@ -74,7 +76,7 @@ int main(int argc, char** argv) {
                        "publisher-batch", "egress-batch", "adaptive-batching", "egress-capacity",
                        "ingress-capacity", "policy", "network-cpu", "dispatcher-cpu",
                        "producer-cpu", "consumer-cpu", "idle-spin-us", "idle-sleep-us",
-                       "csv", "variant", "help"});
+                       "csv", "histogram", "variant", "help"});
   if (args.flag("help")) {
     std::cout
         << "usage: flashbus-bench [--producers N] [--consumers N] [--messages N] "
@@ -86,7 +88,7 @@ int main(int argc, char** argv) {
            "                      [--ingress-capacity N] [--policy NAME] [--network-cpu N]\n"
            "                      [--dispatcher-cpu N] [--producer-cpu N] [--consumer-cpu N]\n"
            "                      [--idle-spin-us N] [--idle-sleep-us N]\n"
-           "                      [--csv PATH] [--variant NAME]\n"
+           "                      [--csv PATH] [--histogram PATH] [--variant NAME]\n"
            "  --messages is the total published across all producers; each consumer is\n"
            "  subscribed to the same topic, so each one should receive all of them.\n"
            "  --producer-cpu/--consumer-cpu give the first CPU of a consecutive range.\n";
@@ -112,6 +114,7 @@ int main(int argc, char** argv) {
   options.idle_spin_us = args.number<unsigned>("idle-spin-us", options.idle_spin_us);
   options.idle_sleep_us = args.number<unsigned>("idle-sleep-us", options.idle_sleep_us);
   options.csv = args.string("csv", "");
+  options.histogram = args.string("histogram", "");
   options.variant = args.string("variant", options.variant);
 
   const std::string policy_name = args.string("policy", "drop-newest");
@@ -371,6 +374,17 @@ int main(int argc, char** argv) {
   if (!options.csv.empty()) {
     ResultWriter(options.csv).add(result);
     std::cout << "wrote " << options.csv << '\n';
+  }
+  if (!options.histogram.empty()) {
+    // The whole distribution, not just the percentiles the row above carries.
+    // Bucket counts rather than raw samples: a few hundred rows describes
+    // millions of events to within 0.8%.
+    std::ofstream out(options.histogram);
+    out << "upper_ns,count\n";
+    latency.for_each_bucket([&out](uint64_t upper_ns, uint64_t count) {
+      out << upper_ns << ',' << count << '\n';
+    });
+    std::cout << "wrote " << options.histogram << '\n';
   }
   return 0;
 }

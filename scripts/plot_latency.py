@@ -235,6 +235,50 @@ def sustained(rows: list[dict], out: Path) -> None:
     print("  sustained.png")
 
 
+def distribution(rows: list[dict], out: Path) -> None:
+    """The whole latency distribution, not just the percentiles.
+
+    Drawn from histogram bucket counts, which is why a few hundred rows can
+    describe millions of events. The complementary CDF on a log scale is the
+    view that makes a tail visible; a plain histogram hides it under the mode.
+    """
+    if not rows:
+        return
+    buckets = sorted((int(r["upper_ns"]), int(r["count"])) for r in rows)
+    total = sum(count for _, count in buckets)
+    if total == 0:
+        return
+
+    figure, axes = plt.subplots(1, 2, figsize=(11, 4))
+    axes[0].bar([b / 1000.0 for b, _ in buckets],
+                [c for _, c in buckets],
+                width=[max(b * 0.004 / 1000.0, 0.001) for b, _ in buckets],
+                color="#2980b9")
+    axes[0].set_xlabel("latency (us)")
+    axes[0].set_ylabel("events")
+    axes[0].set_title("Distribution")
+
+    remaining = total
+    xs, ys = [], []
+    for upper, count in buckets:
+        xs.append(upper / 1000.0)
+        ys.append(remaining / total)
+        remaining -= count
+    axes[1].plot(xs, ys, color="#c0392b")
+    axes[1].set_yscale("log")
+    axes[1].set_xlabel("latency (us)")
+    axes[1].set_ylabel("fraction of events at least this slow")
+    axes[1].set_title("Tail (complementary CDF)")
+
+    for axis in axes:
+        axis.grid(True, alpha=0.3, linestyle=":")
+    figure.suptitle(f"End-to-end latency, {total:,} events")
+    figure.tight_layout()
+    figure.savefig(out / "latency_distribution.png", dpi=140, bbox_inches="tight")
+    plt.close(figure)
+    print("  latency_distribution.png")
+
+
 def spin_vs_park(rows: list[dict], out: Path) -> None:
     if not rows:
         return
@@ -271,6 +315,7 @@ def main() -> None:
     batching(read(args.results / "batching.csv"), args.results)
     sustained(read(args.results / "sustained.csv"), args.results)
     spin_vs_park(read(args.results / "spin_vs_park.csv"), args.results)
+    distribution(read(args.results / "latency_histogram.csv"), args.results)
 
 
 if __name__ == "__main__":

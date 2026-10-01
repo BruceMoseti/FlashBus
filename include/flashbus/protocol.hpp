@@ -128,7 +128,6 @@ class StreamDecoder {
         head_ = tail_ = 0;
         size_t consumed = 0;
         const DecodeError error = parse(data, size, consumed, fn);
-        bytes_consumed_ += consumed;
         if (error != DecodeError::kOk) return error;
         data += consumed;
         size -= consumed;
@@ -148,7 +147,6 @@ class StreamDecoder {
       size_t consumed = 0;
       const DecodeError error = parse(buffer_.data() + head_, buffered(), consumed, fn);
       head_ += consumed;
-      bytes_consumed_ += consumed;
       if (error != DecodeError::kOk) return error;
       if (buffered() == 0) head_ = tail_ = 0;
     }
@@ -156,14 +154,12 @@ class StreamDecoder {
   }
 
   [[nodiscard]] uint64_t frames_decoded() const noexcept { return frames_; }
-  [[nodiscard]] uint64_t bytes_consumed() const noexcept { return bytes_consumed_; }
   /// Bytes of an incomplete frame currently held over.
   [[nodiscard]] size_t pending() const noexcept { return buffered(); }
 
   void reset() noexcept {
     head_ = tail_ = 0;
     frames_ = 0;
-    bytes_consumed_ = 0;
   }
 
  private:
@@ -206,7 +202,6 @@ class StreamDecoder {
   size_t head_ = 0;
   size_t tail_ = 0;
   uint64_t frames_ = 0;
-  uint64_t bytes_consumed_ = 0;
 };
 
 }  // namespace flashbus

@@ -137,9 +137,13 @@ def end_to_end(runner: Runner) -> None:
     csv = str(runner.out / "end_to_end.csv")
 
     for payload in (32, 64, 128, 256, 1024):
+        # The 64-byte run also dumps the full histogram, so the distribution
+        # chart shows the whole shape rather than five percentiles.
+        extra = (["--histogram", str(runner.out / "latency_histogram.csv")]
+                 if payload == 64 else [])
         runner.run(f"05_payload_{payload}B", bench,
                    ["--messages", str(runner.messages_for(200_000, 5)), "--payload", str(payload),
-                    "--rate", "200000", "--variant", f"payload-{payload}B", "--csv", csv])
+                    "--rate", "200000", "--variant", f"payload-{payload}B", "--csv", csv] + extra)
 
     # The overload curve: latency, loss and queue depth against offered load.
     #
