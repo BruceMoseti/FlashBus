@@ -31,11 +31,23 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             g++ cmake ninja-build libboost-system-dev libgtest-dev
 
+      # ThreadSanitizer maps its shadow memory at fixed addresses. Ubuntu 24.04
+      # raised vm.mmap_rnd_bits to 32, and with that much entropy a normal
+      # mapping can land where TSan needs one, aborting the process with
+      # "unexpected memory mapping" before any test runs. Because it depends on
+      # where the randomised mapping happens to land, it shows up as an
+      # intermittent sanitizer-only failure rather than a clean reproducible
+      # one. Lowering the entropy for this job is the standard mitigation and
+      # changes nothing about the code under test.
+      - name: Lower ASLR entropy (Ubuntu 24.04 vs sanitizer shadow memory)
+        run: sudo sysctl -w vm.mmap_rnd_bits=28 || true
+
       - name: Show the machine
-        # Load in the correctness suite scales with the core count, so it is
-        # worth recording what the runner actually provided.
+        # Load in the correctness suite scales with the CPUs available to the
+        # process, so it is worth recording what the runner actually provided.
         run: |
           nproc
+          cat /proc/sys/vm/mmap_rnd_bits 2>/dev/null || echo "mmap_rnd_bits: n/a"
           g++ --version | head -1
           cmake --version | head -1
 
@@ -48,8 +60,36 @@ jobs:
       - name: Test
         run: ctest --test-dir build/${{ matrix.preset }} --output-on-failure -j1
 
-      # Without this, a failure on a runner I cannot log into tells me only
-      # which suite failed, not which assertion or which sanitizer report.
+      # A bare "suite X failed" is not actionable. These two steps put the
+      # failing assertion or sanitizer report where it can be read: on the run
+      # summary page, and as a downloadable artifact.
+      - name: Explain the failure on the run summary
+        if: failure()
+        run: |
+          log="build/${{ matrix.preset }}/Testing/Temporary/LastTest.log"
+          {
+            echo "## tests (${{ matrix.preset }}) failed"
+            echo
+            echo "\`nproc\` = $(nproc), \`vm.mmap_rnd_bits\` = $(cat /proc/sys/vm/mmap_rnd_bits 2>/dev/null || echo n/a)"
+            echo
+            if grep -qE "ThreadSanitizer|AddressSanitizer|runtime error:" "$log" 2>/dev/null; then
+              echo "### Sanitizer report"
+              echo '```'
+              grep -m1 -B2 -A30 -E "WARNING: ThreadSanitizer|ERROR: AddressSanitizer|FATAL:|runtime error:" "$log"
+              echo '```'
+            fi
+            if grep -q "\[  FAILED  \]" "$log" 2>/dev/null; then
+              echo "### Failed assertions"
+              echo '```'
+              grep -E "^\[  FAILED  \]|Failure$|Which is:|^  [a-z_]+\(\)" "$log" | head -40
+              echo '```'
+            fi
+            echo "### Last 60 lines"
+            echo '```'
+            tail -60 "$log" 2>/dev/null || echo "no CTest log was produced"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload test log on failure
         if: failure()
         uses: actions/upload-artifact@v4
