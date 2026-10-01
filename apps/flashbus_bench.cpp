@@ -156,6 +156,11 @@ int main(int argc, char** argv) {
   const uint64_t per_producer = options.messages / options.producers;
   const uint64_t total_published = per_producer * options.producers;
   const uint64_t warmup_deadline_offset = static_cast<uint64_t>(options.warmup_s * 1e9);
+  // The wall-clock warmup ends early if it would swallow too much of the run.
+  // Without this cap a fast configuration finishes inside the warmup window and
+  // reports a throughput of zero over a window of zero, which is worse than a
+  // wrong number because it looks like a crash rather than a harness mistake.
+  const uint64_t warmup_message_cap = std::max<uint64_t>(1, total_published / 4);
 
   std::vector<ConsumerResult> results(options.consumers);
   std::atomic<uint32_t> ready{0};
@@ -183,7 +188,9 @@ int main(int argc, char** argv) {
               [&](const MessageHeader& header, const std::byte*, size_t) {
                 const uint64_t received_ns = now_ns();
                 if (warmup_until == 0) warmup_until = received_ns + warmup_deadline_offset;
-                if (received_ns < warmup_until) return;
+                if (received_ns < warmup_until && subscriber.received() <= warmup_message_cap) {
+                  return;
+                }
                 if (received_ns > header.timestamp_ns) {
                   result.latency.record(received_ns - header.timestamp_ns);
                 }
@@ -294,6 +301,14 @@ int main(int argc, char** argv) {
                               ? static_cast<double>(window_end - window_start) / 1e9
                               : 0.0;
   const double total_s = static_cast<double>(finished_ns - started_ns) / 1e9;
+
+  // Refuse to report a result with nothing in it. A row of zeros in a CSV is
+  // indistinguishable from a measured zero once it is in a chart.
+  if (recorded == 0 || window_s <= 0.0) {
+    std::cerr << "flashbus-bench: no samples outside the warmup (received " << received
+              << ", window " << window_s << " s). Raise --messages or lower --warmup.\n";
+    return 1;
+  }
 
   BenchmarkResult result;
   result.benchmark = "end_to_end";

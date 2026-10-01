@@ -60,17 +60,24 @@ std::optional<unsigned> smt_sibling_of_cpu0() {
   return std::nullopt;
 }
 
-BenchmarkResult run(const Placement& placement, uint64_t messages, size_t capacity) {
+BenchmarkResult run(const Placement& placement, uint64_t messages, size_t capacity,
+                    uint64_t rate) {
   SpscRing<Item> ring(capacity);
   Histogram latency;
 
   const Rusage usage_before = rusage_now();
   const uint64_t started = now_ns();
 
+  // Both sides run on threads of their own. Pinning the calling thread would
+  // stick for the rest of the process and be inherited by every later thread,
+  // so one pinned placement would silently contaminate all the placements after
+  // it -- including the unpinned baseline.
   std::thread producer([&] {
     if (placement.producer_cpu >= 0) pin_to_cpu(static_cast<unsigned>(placement.producer_cpu));
     Item item;
+    const Pacer pacer(rate);
     for (uint64_t i = 0; i < messages; ++i) {
+      if (rate != 0) pacer.wait_for(i);
       item.sequence = i;
       item.timestamp_ns = now_ns();
       while (!ring.try_push(item)) {
@@ -78,25 +85,29 @@ BenchmarkResult run(const Placement& placement, uint64_t messages, size_t capaci
     }
   });
 
-  if (placement.consumer_cpu >= 0) pin_to_cpu(static_cast<unsigned>(placement.consumer_cpu));
-  Item item;
   uint64_t received = 0;
-  while (received < messages) {
-    if (!ring.try_pop(item)) continue;
-    const uint64_t now = now_ns();
-    if (now > item.timestamp_ns) latency.record(now - item.timestamp_ns);
-    ++received;
-  }
+  std::thread consumer([&] {
+    if (placement.consumer_cpu >= 0) pin_to_cpu(static_cast<unsigned>(placement.consumer_cpu));
+    Item item;
+    while (received < messages) {
+      if (!ring.try_pop(item)) continue;
+      const uint64_t now = now_ns();
+      if (now > item.timestamp_ns) latency.record(now - item.timestamp_ns);
+      ++received;
+    }
+  });
   producer.join();
+  consumer.join();
 
   const double elapsed = static_cast<double>(now_ns() - started) / 1e9;
   const Rusage usage_after = rusage_now();
 
   BenchmarkResult result;
-  result.benchmark = "affinity";
+  result.benchmark = rate == 0 ? "affinity_saturated" : "affinity_paced";
   result.variant = placement.name;
   result.payload_bytes = sizeof(Item);
   result.capacity = ring.capacity();
+  result.target_rate = rate;
   result.messages_sent = messages;
   result.messages_received = received;
   result.duration_s = elapsed;
@@ -110,18 +121,32 @@ BenchmarkResult run(const Placement& placement, uint64_t messages, size_t capaci
 
 int main(int argc, char** argv) {
   const cli::Args args(argc, argv);
-  args.reject_unknown({"messages", "capacity", "csv", "help"});
+  args.reject_unknown({"messages", "capacity", "rate", "repeat", "csv", "help"});
   if (args.flag("help")) {
-    std::cout << "usage: affinity_bench [--messages N] [--capacity N] [--csv PATH]\n";
+    std::cout << "usage: affinity_bench [--messages N] [--capacity N] [--rate MSG/S]\n"
+                 "                      [--repeat N] [--csv PATH]\n"
+                 "  Runs each placement twice: saturated for throughput, and paced at --rate\n"
+                 "  so the queue stays shallow and the latency figure is handoff cost.\n";
     return 0;
   }
   const auto messages = args.number<uint64_t>("messages", 5'000'000);
   const auto capacity = args.number<size_t>("capacity", 4096);
+  const auto rate = args.number<uint64_t>("rate", 1'000'000);
+  const unsigned repeat = std::max(1u, args.number<unsigned>("repeat", 5));
   const std::string csv = args.string("csv", "");
 
   print_env(std::cout);
   const unsigned cpus = env_info().cpu_count;
-  if (!pin_to_cpu(0)) {
+
+  // Probe inside a throwaway thread. Calling pin_to_cpu here would pin this
+  // thread for the rest of the process, and since the consumer runs on this
+  // thread and new threads inherit the affinity mask, the "unpinned" baseline
+  // would silently run both threads on CPU 0 and report a quarter of the real
+  // throughput.
+  bool can_pin = false;
+  std::thread probe([&] { can_pin = pin_to_cpu(0); });
+  probe.join();
+  if (!can_pin) {
     std::cout << "\nthis process is not allowed to set CPU affinity; only the unpinned "
                  "result is meaningful\n";
   }
@@ -146,10 +171,35 @@ int main(int argc, char** argv) {
   std::cout << '\n';
   std::unique_ptr<ResultWriter> writer;
   if (!csv.empty()) writer = std::make_unique<ResultWriter>(csv);
+  // Repeated, because the spread between runs on this machine is wide enough
+  // that a single run cannot distinguish one placement from another.
+  const auto measure = [&](const Placement& placement, uint64_t paced_rate) {
+    std::vector<BenchmarkResult> runs;
+    for (unsigned i = 0; i < repeat; ++i) {
+      runs.push_back(run(placement, placement.messages, capacity, paced_rate));
+      if (writer != nullptr) writer->add(runs.back());
+    }
+    std::sort(runs.begin(), runs.end(),
+              [](const BenchmarkResult& a, const BenchmarkResult& b) {
+                return a.throughput_msg_s < b.throughput_msg_s;
+              });
+    print_result(std::cout, runs[runs.size() / 2]);
+    std::cout << "   spread        " << repeat << " runs, throughput "
+              << runs.front().throughput_msg_s / 1e6 << " to "
+              << runs.back().throughput_msg_s / 1e6 << " M msg/s (median above)\n";
+  };
+
+  std::cout << "--- saturated: how fast the handoff goes. The latency column here is just\n"
+               "    ring capacity divided by throughput, so read the throughput.\n";
+  for (const Placement& placement : placements) measure(placement, 0);
+
+  std::cout << "\n--- paced at " << rate << " msg/s: the queue stays shallow, so the latency\n"
+               "    column is the handoff cost and placement is the only thing varying.\n";
   for (const Placement& placement : placements) {
-    const BenchmarkResult result = run(placement, placement.messages, capacity);
-    print_result(std::cout, result);
-    if (writer != nullptr) writer->add(result);
+    // The same-core placement cannot reach the paced rate at all, so pacing it
+    // would measure the scheduler's timeslice rather than a handoff.
+    if (placement.producer_cpu == placement.consumer_cpu && placement.producer_cpu >= 0) continue;
+    measure(placement, rate);
   }
   return 0;
 }
