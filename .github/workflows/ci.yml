@@ -128,10 +128,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python3 -m pip install --quiet ruff
-      - run: ruff check scripts/
-      - name: Scripts are syntactically valid and self-documenting
+      # Pinned. ruff.toml fixes which rules run, but a new ruff release can add
+      # checks to an already-selected group, so the version has to be pinned too
+      # or "CI is green" stops meaning anything stable.
+      - run: python3 -m pip install --quiet ruff==0.16.9
+      - run: python3 -m ruff check scripts/
+      - name: Scripts explain themselves without their optional dependencies
+        # Deliberately run with no matplotlib installed: --help must work on a
+        # machine that cannot draw a chart.
         run: |
+          set -eu
           for script in scripts/*.py; do
             python3 "$script" --help > /dev/null
           done

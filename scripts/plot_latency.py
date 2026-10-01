@@ -19,7 +19,11 @@ try:
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 except ImportError:
-    sys.exit("matplotlib is required:  pip install matplotlib")
+    # Reported from main(), not here. Exiting at import time would break
+    # `--help` on a machine without a plotting stack, and a tool should be able
+    # to explain itself even when an optional dependency for its real work is
+    # missing. CI lints these scripts without matplotlib installed.
+    plt = None
 
 REPO = Path(__file__).resolve().parent.parent
 PERCENTILES = [("p50_ns", "p50"), ("p95_ns", "p95"), ("p99_ns", "p99"), ("p999_ns", "p99.9")]
@@ -304,6 +308,8 @@ def main() -> None:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--results", type=Path, default=REPO / "results" / "latest")
     args = parser.parse_args()
+    if plt is None:
+        sys.exit("matplotlib is required to draw charts:  pip install matplotlib")
     if not args.results.exists():
         sys.exit(f"{args.results} does not exist; run scripts/run_benchmarks.py first")
 

@@ -1,4 +1,7 @@
-# Pinned explicitly so that a ruff upgrade cannot change what CI enforces.
+# Which rules run. The ruff *version* is pinned separately, in the CI workflow:
+# selecting a rule group here is not enough on its own, because a new release
+# can add checks to a group that is already selected.
+#
 # The scripts here generate the numbers in the README, so a bug in one of them
 # is a documentation bug, and the rules worth enforcing are the ones that catch
 # that class of mistake.
