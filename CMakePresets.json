@@ -1,0 +1,62 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" }
+    },
+    {
+      "name": "default",
+      "inherits": "base",
+      "displayName": "RelWithDebInfo, no sanitizer",
+      "description": "The build every benchmark number comes from."
+    },
+    {
+      "name": "native",
+      "inherits": "base",
+      "displayName": "RelWithDebInfo with -march=native",
+      "cacheVariables": { "FLASHBUS_NATIVE_ARCH": "ON" }
+    },
+    {
+      "name": "asan",
+      "inherits": "base",
+      "displayName": "AddressSanitizer",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "FLASHBUS_SANITIZER": "address" }
+    },
+    {
+      "name": "ubsan",
+      "inherits": "base",
+      "displayName": "UndefinedBehaviorSanitizer",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "FLASHBUS_SANITIZER": "undefined" }
+    },
+    {
+      "name": "tsan",
+      "inherits": "base",
+      "displayName": "ThreadSanitizer",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "FLASHBUS_SANITIZER": "thread" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "default", "configurePreset": "default" },
+    { "name": "native", "configurePreset": "native" },
+    { "name": "asan", "configurePreset": "asan" },
+    { "name": "ubsan", "configurePreset": "ubsan" },
+    { "name": "tsan", "configurePreset": "tsan" }
+  ],
+  "testPresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
+    },
+    { "name": "default", "inherits": "base", "configurePreset": "default" },
+    { "name": "asan", "inherits": "base", "configurePreset": "asan" },
+    { "name": "ubsan", "inherits": "base", "configurePreset": "ubsan" },
+    { "name": "tsan", "inherits": "base", "configurePreset": "tsan" }
+  ]
+}
