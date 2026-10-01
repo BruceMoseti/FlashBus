@@ -31,27 +31,50 @@ else
   TARGET=("${BUILD}/benchmarks/queue_bench" --messages 20000000 --payload 48 --mode throughput)
 fi
 
-if ! command -v perf >/dev/null 2>&1; then
-  # Ubuntu ships perf in a kernel-version-specific package; fall back to any
-  # version that is installed, since software events work across versions.
-  PERF=$(ls -1 /usr/lib/linux-tools/*/perf 2>/dev/null | head -1)
-  if [[ -z "${PERF}" ]]; then
-    echo "perf is not installed."
-    echo "  Ubuntu:  sudo apt-get install linux-tools-common linux-tools-\$(uname -r)"
-    echo "  Fedora:  sudo dnf install perf"
-    exit 127
+# Counts one event and echoes the value, or nothing if it cannot be counted.
+#
+# Checking that a perf binary exists is not enough. Ubuntu's /usr/bin/perf is a
+# wrapper that looks for a binary matching the running kernel and, when it finds
+# none, prints installation advice and exits successfully. Grepping its output
+# for "not supported" then finds nothing and every event looks available --
+# which is the exact mistake this script exists to prevent. So each candidate
+# has to actually produce a count before it is trusted.
+count_event() {
+  local perf="$1" event="$2" line
+  # A counted event's first CSV field is a number; task-clock reports a float
+  # in milliseconds, so both forms have to match. Anything else -- including
+  # "<not supported>" and "<not counted>" -- means the event is unusable.
+  line=$("${perf}" stat -e "${event}" -x, true 2>&1 | grep -E "^[0-9]+(\.[0-9]+)?," | head -1)
+  [[ -n "${line}" ]] && echo "${line%%,*}"
+}
+
+PERF=""
+for candidate in $(command -v perf 2>/dev/null) /usr/lib/linux-tools/*/perf; do
+  [[ -x "${candidate}" ]] || continue
+  if [[ -n "$(count_event "${candidate}" task-clock)" ]]; then
+    PERF="${candidate}"
+    break
   fi
-  echo "note: no 'perf' on PATH; using ${PERF} (built for a different kernel)"
-else
-  PERF=$(command -v perf)
+  echo "note: ${candidate} cannot count even task-clock; skipping it"
+done
+
+if [[ -z "${PERF}" ]]; then
+  echo
+  echo "No working perf on this machine."
+  echo "  Ubuntu:  sudo apt-get install linux-tools-common linux-tools-\$(uname -r)"
+  echo "  Fedora:  sudo dnf install perf"
+  echo
+  echo "FlashBus collects context switches, page faults, CPU time and resident"
+  echo "memory itself through getrusage, and those appear in every result row,"
+  echo "so the benchmarks remain usable without perf. What is lost is the"
+  echo "microarchitectural view: cycles, branch misses and cache misses."
+  exit 127
 fi
 
 PARANOID=$(cat /proc/sys/kernel/perf_event_paranoid 2>/dev/null || echo unknown)
 echo "perf:            ${PERF}"
 echo "paranoid level:  ${PARANOID}  (needs <= 2 for user-space counters, or run as root)"
 
-# Probe each event separately. An event that reports "<not supported>" is not
-# available on this machine and must not appear in any result.
 HARDWARE=(cycles instructions branches branch-misses cache-references cache-misses
           stalled-cycles-frontend)
 SOFTWARE=(task-clock context-switches cpu-migrations page-faults minor-faults major-faults)
@@ -59,10 +82,10 @@ SOFTWARE=(task-clock context-switches cpu-migrations page-faults minor-faults ma
 available=()
 unsupported=()
 for event in "${HARDWARE[@]}" "${SOFTWARE[@]}"; do
-  if "${PERF}" stat -e "${event}" -x, true 2>&1 | grep -q "not supported"; then
-    unsupported+=("${event}")
-  else
+  if [[ -n "$(count_event "${PERF}" "${event}")" ]]; then
     available+=("${event}")
+  else
+    unsupported+=("${event}")
   fi
 done
 
