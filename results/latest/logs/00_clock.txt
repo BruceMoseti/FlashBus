@@ -1,0 +1,20 @@
+CPU:          Intel(R) Xeon(R) Processor (8 logical)
+Kernel:       6.12.94+
+OS:           Linux x86_64 / Ubuntu 24.04.4 LTS
+Compiler:     g++ 13.3.0 [RelWithDebInfo]
+Flags:        -O2 -g -DNDEBUG
+Sanitizer:    none
+Boost:        1.83.0
+Governor:     unavailable
+TSC:          constant, nonstop
+Hardware PMU: NOT available (no vPMU)
+
+steady_clock::now()  24.44 ns per read
+rdtscp               17.61 ns per read (calibrated at 2.400 GHz)
+agreement over 200 ms: steady 200000051 ns, tsc 199999992 ns, drift -0.00%
+  -> within 0.5%. The TSC path would be usable, and would save about 6.83 ns per read.
+
+gap between consecutive now_ns() calls, ns:
+  min 23  p50 26  p99 30  p99.9 32  max 17550
+  min is the clock read itself; the tail is this machine interfering with the
+  measurement, and it bounds how small a p99.9 claim can be believed.

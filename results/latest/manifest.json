@@ -1,0 +1,168 @@
+{
+  "generated_utc": "2026-10-01T04:24:29.774071+00:00",
+  "quick": false,
+  "build": "/workspace/build/default",
+  "runs": [
+    {
+      "label": "08_batch_1",
+      "command": [
+        "/workspace/build/default/apps/flashbus-bench",
+        "--messages",
+        "2500000",
+        "--payload",
+        "64",
+        "--rate",
+        "500000",
+        "--egress-batch",
+        "1",
+        "--variant",
+        "fixed-batch-1",
+        "--csv",
+        "/workspace/results/latest/batching.csv"
+      ],
+      "started_utc": "2026-10-01T04:23:43.123814+00:00",
+      "seconds": 7.667261
+    },
+    {
+      "label": "08_batch_8",
+      "command": [
+        "/workspace/build/default/apps/flashbus-bench",
+        "--messages",
+        "2500000",
+        "--payload",
+        "64",
+        "--rate",
+        "500000",
+        "--egress-batch",
+        "8",
+        "--variant",
+        "fixed-batch-8",
+        "--csv",
+        "/workspace/results/latest/batching.csv"
+      ],
+      "started_utc": "2026-10-01T04:23:50.791099+00:00",
+      "seconds": 6.676833
+    },
+    {
+      "label": "08_batch_32",
+      "command": [
+        "/workspace/build/default/apps/flashbus-bench",
+        "--messages",
+        "2500000",
+        "--payload",
+        "64",
+        "--rate",
+        "500000",
+        "--egress-batch",
+        "32",
+        "--variant",
+        "fixed-batch-32",
+        "--csv",
+        "/workspace/results/latest/batching.csv"
+      ],
+      "started_utc": "2026-10-01T04:23:57.467957+00:00",
+      "seconds": 5.782281
+    },
+    {
+      "label": "08_batch_128",
+      "command": [
+        "/workspace/build/default/apps/flashbus-bench",
+        "--messages",
+        "2500000",
+        "--payload",
+        "64",
+        "--rate",
+        "500000",
+        "--egress-batch",
+        "128",
+        "--variant",
+        "fixed-batch-128",
+        "--csv",
+        "/workspace/results/latest/batching.csv"
+      ],
+      "started_utc": "2026-10-01T04:24:03.250261+00:00",
+      "seconds": 5.831801
+    },
+    {
+      "label": "08_batch_adaptive",
+      "command": [
+        "/workspace/build/default/apps/flashbus-bench",
+        "--messages",
+        "2500000",
+        "--payload",
+        "64",
+        "--rate",
+        "500000",
+        "--egress-batch",
+        "32",
+        "--adaptive-batching",
+        "--variant",
+        "adaptive-batch",
+        "--csv",
+        "/workspace/results/latest/batching.csv"
+      ],
+      "started_utc": "2026-10-01T04:24:09.082088+00:00",
+      "seconds": 5.008792
+    },
+    {
+      "label": "08_batch_1_saturated",
+      "command": [
+        "/workspace/build/default/apps/flashbus-bench",
+        "--messages",
+        "2000000",
+        "--payload",
+        "64",
+        "--rate",
+        "0",
+        "--egress-batch",
+        "1",
+        "--variant",
+        "saturated-batch-1",
+        "--csv",
+        "/workspace/results/latest/batching_saturated.csv"
+      ],
+      "started_utc": "2026-10-01T04:24:14.090927+00:00",
+      "seconds": 6.215199
+    },
+    {
+      "label": "08_batch_32_saturated",
+      "command": [
+        "/workspace/build/default/apps/flashbus-bench",
+        "--messages",
+        "2000000",
+        "--payload",
+        "64",
+        "--rate",
+        "0",
+        "--egress-batch",
+        "32",
+        "--variant",
+        "saturated-batch-32",
+        "--csv",
+        "/workspace/results/latest/batching_saturated.csv"
+      ],
+      "started_utc": "2026-10-01T04:24:20.306168+00:00",
+      "seconds": 4.996824
+    },
+    {
+      "label": "08_batch_128_saturated",
+      "command": [
+        "/workspace/build/default/apps/flashbus-bench",
+        "--messages",
+        "2000000",
+        "--payload",
+        "64",
+        "--rate",
+        "0",
+        "--egress-batch",
+        "128",
+        "--variant",
+        "saturated-batch-128",
+        "--csv",
+        "/workspace/results/latest/batching_saturated.csv"
+      ],
+      "started_utc": "2026-10-01T04:24:25.303038+00:00",
+      "seconds": 4.471013
+    }
+  ]
+}

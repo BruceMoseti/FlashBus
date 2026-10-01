@@ -1,0 +1,39 @@
+CPU:          Intel(R) Xeon(R) Processor (8 logical)
+Kernel:       6.12.94+
+OS:           Linux x86_64 / Ubuntu 24.04.4 LTS
+Compiler:     g++ 13.3.0 [RelWithDebInfo]
+Flags:        -O2 -g -DNDEBUG
+Sanitizer:    none
+Boost:        1.83.0
+Governor:     unavailable
+TSC:          constant, nonstop
+Hardware PMU: NOT available (no vPMU)
+
+one now_ns() costs about 24.23 ns; latency-mode numbers include two of them
+producer unthrottled: the queue saturates, so latency is dominated by
+queueing depth rather than by handoff cost
+
+-- queue_throughput / mutex-queue
+   payload       128 B, 1P/1C, capacity 65536
+   duration      1.434 s (warmup 0.000 s)
+   throughput    6.277 M msg/s
+   latency us    p50 0.000  p95 0.000  p99 0.000  p99.9 0.000  max 0.000
+   sent/recv     10000000 / 10000000   dropped 0   gaps 0
+   cpu           1.54 cores   ctx-sw 1091163v/10i   faults 323m/0M   heap allocs 0
+   spread        3 runs, throughput 5.97 to 6.40 M msg/s (median reported above)
+-- queue_throughput / spsc-padded
+   payload       128 B, 1P/1C, capacity 65536
+   duration      0.067 s (warmup 0.000 s)
+   throughput    133.880 M msg/s
+   latency us    p50 0.000  p95 0.000  p99 0.000  p99.9 0.000  max 0.000
+   sent/recv     10000000 / 10000000   dropped 0   gaps 0
+   cpu           1.97 cores   ctx-sw 6v/6i   faults 4097m/0M   heap allocs 0
+   spread        3 runs, throughput 110.51 to 143.87 M msg/s (median reported above)
+-- queue_throughput / spsc-unpadded
+   payload       128 B, 1P/1C, capacity 65536
+   duration      0.686 s (warmup 0.000 s)
+   throughput    13.113 M msg/s
+   latency us    p50 0.000  p95 0.000  p99 0.000  p99.9 0.000  max 0.000
+   sent/recv     10000000 / 10000000   dropped 0   gaps 0
+   cpu           1.99 cores   ctx-sw 6v/17i   faults 0m/0M   heap allocs 0
+   spread        3 runs, throughput 13.11 to 13.15 M msg/s (median reported above)

@@ -1,0 +1,29 @@
+FlashBus Benchmark
+CPU:          Intel(R) Xeon(R) Processor (8 logical)
+Kernel:       6.12.94+
+OS:           Linux x86_64 / Ubuntu 24.04.4 LTS
+Compiler:     g++ 13.3.0 [RelWithDebInfo]
+Flags:        -O2 -g -DNDEBUG
+Sanitizer:    none
+Boost:        1.83.0
+Governor:     unavailable
+TSC:          constant, nonstop
+Hardware PMU: NOT available (no vPMU)
+Payload:        1024 B
+Topology:       1 publishers -> broker -> 1 subscribers
+Messages:       1000000 published, 1000000 received across subscribers
+Egress batch:   32, publisher batch 1, policy drop-newest
+Throughput:     0.200 M msg/s delivered (over 4.497 s measured window)
+Latency:
+  p50           20.991 us
+  p95           29.823 us
+  p99           36.351 us
+  p99.9         52.991 us
+  max           553.785 us
+Dropped:        0 (0 egress overflow, 0 ingress overflow)
+Sequence gaps:  0 (0 events)
+Unroutable:     0
+Egress depth:   77 high water of 4096
+CPU:            4.00 cores, ctx-sw 37v/231i, faults 2210m/0M
+Heap allocs:    28 during the run
+wrote /workspace/results/latest/end_to_end.csv
