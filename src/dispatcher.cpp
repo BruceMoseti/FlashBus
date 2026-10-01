@@ -9,7 +9,8 @@
 
 namespace flashbus {
 
-Dispatcher::Dispatcher(DispatcherConfig config) : config_(config) {}
+Dispatcher::Dispatcher(DispatcherConfig config)
+    : config_(config), routes_(kMaxTopicId + 1), next_sequence_(kMaxTopicId + 1, 0) {}
 
 void Dispatcher::add_channel(ChannelPtr channel) {
   const std::lock_guard<std::mutex> lock(pending_mutex_);

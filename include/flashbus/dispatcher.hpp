@@ -56,9 +56,12 @@ class Dispatcher {
 
   DispatcherConfig config_;
   std::vector<ChannelPtr> channels_;
+  // Both are sized in the constructor with parentheses, never with braces.
+  // `std::vector<uint64_t> v{n, 0}` is the initializer-list constructor and
+  // builds a two-element vector; AddressSanitizer caught exactly that here.
   /// Flat by topic id: routing is an array index, not a hash lookup.
-  std::vector<std::vector<ChannelPtr>> routes_{kMaxTopicId + 1};
-  std::vector<uint64_t> next_sequence_{kMaxTopicId + 1, 0};
+  std::vector<std::vector<ChannelPtr>> routes_;
+  std::vector<uint64_t> next_sequence_;
 
   std::mutex pending_mutex_;
   std::vector<ChannelPtr> pending_;

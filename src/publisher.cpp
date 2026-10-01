@@ -34,7 +34,10 @@ bool Publisher::publish(uint32_t topic, const void* payload, size_t size) {
 
   std::byte* out = buffer_.data() + buffered_bytes_;
   encode_header(out, header);
-  std::memcpy(out + kHeaderSize, payload, size);
+  // A zero-length payload is legal, and callers reach it with a null pointer
+  // (an empty container's data()). memcpy from null is undefined even with a
+  // length of zero.
+  if (size != 0) std::memcpy(out + kHeaderSize, payload, size);
   buffered_bytes_ += kHeaderSize + size;
   ++buffered_frames_;
   ++sent_;

@@ -32,7 +32,9 @@ size_t drain(Subscriber& subscriber, size_t expected, Fn&& fn, double timeout_s 
 
 std::vector<std::byte> payload_of(uint64_t value, size_t size) {
   std::vector<std::byte> payload(size);
-  std::memcpy(payload.data(), &value, std::min(size, sizeof(value)));
+  // An empty vector's data() is null, and memcpy from a null pointer is
+  // undefined even for a length of zero. UBSan says so, and it is right.
+  if (size != 0) std::memcpy(payload.data(), &value, std::min(size, sizeof(value)));
   return payload;
 }
 
