@@ -18,7 +18,7 @@ consumers with low and predictable latency.** It is not a durable broker.
 | Buffers | Bounded everywhere; capacity fixed at startup |
 | Durability | None. Nothing is written to disk, ever |
 | Delivery | At-most-once, while connected |
-| Backpressure | Explicit, per subscriber, with a configured policy |
+| Backpressure | Ingress: TCP flow control, lossless. Egress: bounded, with a per-subscriber loss policy |
 | Message format | Binary, fixed 32-byte header, little-endian |
 | Allocation | No heap allocation on the steady-state hot path |
 | Failure behaviour | A disconnected or slow subscriber may miss events |
@@ -29,8 +29,9 @@ consumers with low and predictable latency.** It is not a durable broker.
 * No persistence, no replay, no replication, no consensus.
 * No total order across publishers. Two publishers writing to the same topic
   interleave; each publisher's own events stay in order.
-* No exactly-once delivery. If a subscriber's queue overflows, its configured
-  policy decides what is lost, and the loss is *counted and reported*.
+* No exactly-once delivery. If a subscriber's egress queue overflows, its
+  configured policy decides what is lost, and the loss is *counted and
+  reported* — to the operator as a counter and to the subscriber as a gap.
 * No delivery to subscribers that connect after an event was published.
 * Benchmarks characterise one machine. They are not claimed to generalise.
 
@@ -46,12 +47,29 @@ The dispatcher assigns each accepted event a monotonically increasing
 subscriber can distinguish "the publisher never sent it" from "FlashBus
 dropped it for me".
 
-One consequence is worth stating rather than discovering: an event rejected at
-*ingress*, because the dispatcher was behind and the publisher's ingress ring
-was full, never reaches the sequencer and so never gets a sequence number.
-Subscribers therefore see no gap for it. Such an event is visible only in the
-broker's `frames_rejected` counter. Egress drops, which happen after
-sequencing, do show up as subscriber gaps.
+### Where loss can and cannot happen
+
+Loss is confined to one place on purpose, and it is worth stating which.
+
+**Ingress does not lose events.** A session reads only as many bytes as its
+ingress ring can certainly absorb: every frame is at least a 32-byte header and
+the decoder holds at most one incomplete frame, so reading `(free - 1) × 32`
+bytes yields at most `free` frames. Below two free slots nothing is read at all,
+the TCP receive window closes, and the publisher is throttled by the kernel. A
+publisher outrunning the broker is therefore slowed down, not sampled.
+
+`frames_rejected` still exists as a counter, and under this rule it should
+never move. It is counted rather than asserted so that a mistake in the read
+bound shows up as a number in the stats instead of as events that quietly
+disappear; the tests check that it stays at zero.
+
+**Egress loses events, by policy.** This is where a bounded queue has to make a
+choice, and the choice is configurable per subscriber. Those losses happen
+*after* sequencing, so a subscriber sees them as a gap in the broker sequence
+and can say exactly how many events it missed.
+
+So: FlashBus never drops an event because a publisher was fast. It drops events
+because a subscriber was slow, and it reports which subscriber and how many.
 
 ---
 
@@ -113,6 +131,12 @@ that tolerates any fragmentation, including a header split across several
 
 ## 4. Backpressure
 
+Ingress and egress are deliberately asymmetric: ingress pushes back through TCP
+and loses nothing, egress applies a loss policy. The reason is that an ingress
+ring has exactly one publisher behind it, so stalling it inconveniences only
+that publisher, whereas an egress ring is one leg of a fan-out and stalling it
+would stop everyone.
+
 Every subscriber has its own bounded egress ring. When the dispatcher finds
 that ring full, the session's configured policy applies:
 
@@ -125,9 +149,19 @@ that ring full, the session's configured policy applies:
 `BLOCK` is implemented because it is the obvious thing to ask for, and it is
 not the default because on a fan-out path it converts one slow consumer into a
 system-wide stall — which the slow-consumer benchmark measures rather than
-asserts. `DROP_NEWEST` is the default. This is the central design statement of
-the project: **a bounded queue with a loss policy is a design; an unbounded
-queue is a deferred crash.**
+asserts. Combined with lossless ingress it does deliver genuinely zero loss:
+the dispatcher's wait propagates back through the ingress ring to the
+publisher's own `write()`, and that is tested. The price is still paid by every
+other subscriber on the topic, which is why it is not the default.
+
+`DROP_NEWEST` is the default. This is the central design statement of the
+project: **a bounded queue with a loss policy is a design; an unbounded queue
+is a deferred crash.**
+
+One operational caveat follows from lossless ingress: under `BLOCK`, a
+single-threaded client that both publishes and subscribes over *one* blocking
+connection can deadlock itself, sitting in `write()` while the broker waits for
+it to read. FlashBus's own clients use separate sockets.
 
 `DROP_OLDEST` is deliberately **not** implemented. The oldest queued event sits
 at the index the consumer owns, so dropping it would require the dispatcher to
