@@ -1,0 +1,75 @@
+CPU:          Intel(R) Xeon(R) Processor (8 logical)
+Kernel:       6.12.94+
+OS:           Linux x86_64 / Ubuntu 24.04.4 LTS
+Compiler:     g++ 13.3.0 [RelWithDebInfo]
+Flags:        -O2 -g -DNDEBUG
+Sanitizer:    none
+Boost:        1.83.0
+Governor:     unavailable
+TSC:          constant, nonstop
+Hardware PMU: NOT available (no vPMU)
+
+no SMT sibling for cpu0: either SMT is off or the topology is not exposed, so the
+hyperthread-pairing comparison cannot be run on this machine.
+
+--- saturated: how fast the handoff goes. The latency column here is just
+    ring capacity divided by throughput, so read the throughput.
+-- affinity_saturated / unpinned (scheduler decides)
+   payload       64 B, 1P/1C, capacity 4096
+   duration      0.494 s (warmup 0.000 s)
+   throughput    10.120 M msg/s
+   latency us    p50 421.887  p95 425.983  p99 432.127  p99.9 440.319  max 443.510
+   sent/recv     5000000 / 5000000   dropped 0   gaps 0
+   cpu           2.00 cores   ctx-sw 1v/0i   faults 0m/0M   heap allocs 0
+   spread        5 runs, throughput 9.41 to 16.39 M msg/s (median above)
+-- affinity_saturated / adjacent cpus 0,1
+   payload       64 B, 1P/1C, capacity 4096
+   duration      0.470 s (warmup 0.000 s)
+   throughput    10.648 M msg/s
+   latency us    p50 403.455  p95 409.599  p99 421.887  p99.9 430.079  max 435.643
+   sent/recv     5000000 / 5000000   dropped 0   gaps 0
+   cpu           2.00 cores   ctx-sw 3v/3i   faults 0m/0M   heap allocs 0
+   spread        5 runs, throughput 10.62 to 10.82 M msg/s (median above)
+-- affinity_saturated / distant cpus 0,7
+   payload       64 B, 1P/1C, capacity 4096
+   duration      0.486 s (warmup 0.000 s)
+   throughput    10.292 M msg/s
+   latency us    p50 413.695  p95 419.839  p99 430.079  p99.9 438.271  max 801.957
+   sent/recv     5000000 / 5000000   dropped 0   gaps 0
+   cpu           2.00 cores   ctx-sw 3v/5i   faults 0m/0M   heap allocs 0
+   spread        5 runs, throughput 10.21 to 10.41 M msg/s (median above)
+-- affinity_saturated / same cpu 0 (both threads share one core)
+   payload       64 B, 1P/1C, capacity 4096
+   duration      0.384 s (warmup 0.000 s)
+   throughput    0.521 M msg/s
+   latency us    p50 4014.079  p95 4014.079  p99 4014.079  p99.9 4014.079  max 11895.493
+   sent/recv     200000 / 200000   dropped 0   gaps 0
+   cpu           1.00 cores   ctx-sw 3v/96i   faults 0m/0M   heap allocs 0
+   spread        5 runs, throughput 0.51 to 0.52 M msg/s (median above)
+
+--- paced at 1000000 msg/s: the queue stays shallow, so the latency
+    column is the handoff cost and placement is the only thing varying.
+-- affinity_paced / unpinned (scheduler decides)
+   payload       64 B, 1P/1C, capacity 4096, target 1000000 msg/s
+   duration      5.000 s (warmup 0.000 s)
+   throughput    1.000 M msg/s
+   latency us    p50 0.369  p95 0.415  p99 0.429  p99.9 0.539  max 18.503
+   sent/recv     5000000 / 5000000   dropped 0   gaps 0
+   cpu           2.00 cores   ctx-sw 1v/22i   faults 0m/0M   heap allocs 0
+   spread        5 runs, throughput 1.00 to 1.00 M msg/s (median above)
+-- affinity_paced / adjacent cpus 0,1
+   payload       64 B, 1P/1C, capacity 4096, target 1000000 msg/s
+   duration      5.001 s (warmup 0.000 s)
+   throughput    1.000 M msg/s
+   latency us    p50 0.383  p95 0.407  p99 0.419  p99.9 0.445  max 61.482
+   sent/recv     5000000 / 5000000   dropped 0   gaps 0
+   cpu           2.00 cores   ctx-sw 3v/23i   faults 0m/0M   heap allocs 0
+   spread        5 runs, throughput 1.00 to 1.00 M msg/s (median above)
+-- affinity_paced / distant cpus 0,7
+   payload       64 B, 1P/1C, capacity 4096, target 1000000 msg/s
+   duration      5.000 s (warmup 0.000 s)
+   throughput    1.000 M msg/s
+   latency us    p50 0.381  p95 0.407  p99 0.427  p99.9 0.551  max 17.658
+   sent/recv     5000000 / 5000000   dropped 0   gaps 0
+   cpu           2.00 cores   ctx-sw 3v/26i   faults 0m/0M   heap allocs 0
+   spread        5 runs, throughput 1.00 to 1.00 M msg/s (median above)

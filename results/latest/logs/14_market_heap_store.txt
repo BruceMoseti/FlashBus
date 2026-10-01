@@ -1,0 +1,20 @@
+FlashBus market-data demo
+CPU:          Intel(R) Xeon(R) Processor (8 logical)
+Kernel:       6.12.94+
+OS:           Linux x86_64 / Ubuntu 24.04.4 LTS
+Compiler:     g++ 13.3.0 [RelWithDebInfo]
+Flags:        -O2 -g -DNDEBUG
+Sanitizer:    none
+Boost:        1.83.0
+Governor:     unavailable
+TSC:          constant, nonstop
+Hardware PMU: NOT available (no vPMU)
+Profile:       steady, base rate 400000 msg/s, order store new/delete
+Events:        2000000 published, 2000000 received, 2000000 applied to the book
+Throughput:    0.364 M msg/s over 5.500 s
+Latency us:    p50 17.407  p95 23.679  p99 26.367  p99.9 675.839  max 5388.480
+Dropped:       0   sequence gaps 0 (0 events)
+Egress depth:  1640 of 8192
+Order store:   high water 0, exhausted 0, unknown-order events 0
+Final spreads: 4 2 2 3 4 2 1 -2 (ticks, -1 = one side empty)
+wrote /workspace/results/latest/market_data.csv

@@ -1,0 +1,134 @@
+CPU:          Intel(R) Xeon(R) Processor (8 logical)
+Kernel:       6.12.94+
+OS:           Linux x86_64 / Ubuntu 24.04.4 LTS
+Compiler:     g++ 13.3.0 [RelWithDebInfo]
+Flags:        -O2 -g -DNDEBUG
+Sanitizer:    none
+Boost:        1.83.0
+Governor:     unavailable
+TSC:          constant, nonstop
+Hardware PMU: NOT available (no vPMU)
+
+one now_ns() costs about 31.7021 ns; latency-mode numbers include two of them
+producer paced, so the queue stays shallow and latency is handoff cost
+
+-- queue_latency / mutex-queue
+   payload       32 B, 1P/1C, capacity 4096, target 1000000 msg/s
+   duration      2.700 s (warmup 0.000 s)
+   throughput    1.000 M msg/s
+   latency us    p50 1.191  p95 4.255  p99 5.375  p99.9 8.255  max 319.177
+   sent/recv     3000000 / 3000000   dropped 0   gaps 0
+   cpu           1.84 cores   ctx-sw 663711v/25i   faults 38m/0M   heap allocs 0
+   spread        3 runs, throughput 1.00 to 1.00 M msg/s (median reported above)
+-- queue_latency / spsc-padded
+   payload       32 B, 1P/1C, capacity 4096, target 1000000 msg/s
+   duration      2.700 s (warmup 0.000 s)
+   throughput    1.000 M msg/s
+   latency us    p50 0.349  p95 0.375  p99 0.391  p99.9 0.659  max 15.910
+   sent/recv     3000000 / 3000000   dropped 0   gaps 0
+   cpu           2.00 cores   ctx-sw 3v/41i   faults 88m/0M   heap allocs 0
+   spread        3 runs, throughput 1.00 to 1.00 M msg/s (median reported above)
+-- queue_latency / spsc-unpadded
+   payload       32 B, 1P/1C, capacity 4096, target 1000000 msg/s
+   duration      2.700 s (warmup 0.000 s)
+   throughput    1.000 M msg/s
+   latency us    p50 0.379  p95 0.405  p99 0.421  p99.9 0.575  max 16.649
+   sent/recv     3000000 / 3000000   dropped 0   gaps 0
+   cpu           2.00 cores   ctx-sw 3v/34i   faults 84m/0M   heap allocs 0
+   spread        3 runs, throughput 1.00 to 1.00 M msg/s (median reported above)
+-- queue_latency / mutex-queue
+   payload       64 B, 1P/1C, capacity 4096, target 1000000 msg/s
+   duration      2.700 s (warmup 0.000 s)
+   throughput    1.000 M msg/s
+   latency us    p50 2.543  p95 5.215  p99 7.391  p99.9 9.599  max 126.111
+   sent/recv     3000000 / 3000000   dropped 0   gaps 0
+   cpu           1.70 cores   ctx-sw 1216253v/28i   faults 5m/0M   heap allocs 0
+   spread        3 runs, throughput 1.00 to 1.00 M msg/s (median reported above)
+-- queue_latency / spsc-padded
+   payload       64 B, 1P/1C, capacity 4096, target 1000000 msg/s
+   duration      2.700 s (warmup 0.000 s)
+   throughput    1.000 M msg/s
+   latency us    p50 0.411  p95 0.439  p99 0.461  p99.9 0.715  max 16.190
+   sent/recv     3000000 / 3000000   dropped 0   gaps 0
+   cpu           2.00 cores   ctx-sw 3v/41i   faults 125m/0M   heap allocs 0
+   spread        3 runs, throughput 1.00 to 1.00 M msg/s (median reported above)
+-- queue_latency / spsc-unpadded
+   payload       64 B, 1P/1C, capacity 4096, target 1000000 msg/s
+   duration      2.700 s (warmup 0.000 s)
+   throughput    1.000 M msg/s
+   latency us    p50 0.453  p95 0.475  p99 0.495  p99.9 0.591  max 15.068
+   sent/recv     3000000 / 3000000   dropped 0   gaps 0
+   cpu           2.00 cores   ctx-sw 3v/37i   faults 0m/0M   heap allocs 0
+   spread        3 runs, throughput 1.00 to 1.00 M msg/s (median reported above)
+-- queue_latency / mutex-queue
+   payload       128 B, 1P/1C, capacity 4096, target 1000000 msg/s
+   duration      2.700 s (warmup 0.000 s)
+   throughput    1.000 M msg/s
+   latency us    p50 2.975  p95 7.615  p99 9.855  p99.9 13.951  max 195.618
+   sent/recv     3000000 / 3000000   dropped 0   gaps 0
+   cpu           1.64 cores   ctx-sw 1475506v/7i   faults 0m/0M   heap allocs 0
+   spread        3 runs, throughput 1.00 to 1.00 M msg/s (median reported above)
+-- queue_latency / spsc-padded
+   payload       128 B, 1P/1C, capacity 4096, target 1000000 msg/s
+   duration      2.700 s (warmup 0.000 s)
+   throughput    1.000 M msg/s
+   latency us    p50 0.407  p95 0.447  p99 0.543  p99.9 1.415  max 28.603
+   sent/recv     3000000 / 3000000   dropped 0   gaps 0
+   cpu           2.00 cores   ctx-sw 3v/36i   faults 193m/0M   heap allocs 0
+   spread        3 runs, throughput 1.00 to 1.00 M msg/s (median reported above)
+-- queue_latency / spsc-unpadded
+   payload       128 B, 1P/1C, capacity 4096, target 1000000 msg/s
+   duration      2.700 s (warmup 0.000 s)
+   throughput    1.000 M msg/s
+   latency us    p50 0.411  p95 0.445  p99 0.511  p99.9 1.351  max 141.998
+   sent/recv     3000000 / 3000000   dropped 0   gaps 0
+   cpu           2.00 cores   ctx-sw 3v/35i   faults 0m/0M   heap allocs 0
+   spread        3 runs, throughput 1.00 to 1.00 M msg/s (median reported above)
+-- queue_latency / mutex-queue
+   payload       256 B, 1P/1C, capacity 4096, target 1000000 msg/s
+   duration      2.700 s (warmup 0.000 s)
+   throughput    1.000 M msg/s
+   latency us    p50 5.983  p95 15.807  p99 23.807  p99.9 39.935  max 215.373
+   sent/recv     3000000 / 3000000   dropped 0   gaps 0
+   cpu           1.56 cores   ctx-sw 1707076v/11i   faults 28m/0M   heap allocs 0
+   spread        3 runs, throughput 1.00 to 1.00 M msg/s (median reported above)
+-- queue_latency / spsc-padded
+   payload       256 B, 1P/1C, capacity 4096, target 1000000 msg/s
+   duration      2.700 s (warmup 0.000 s)
+   throughput    1.000 M msg/s
+   latency us    p50 0.459  p95 0.519  p99 0.559  p99.9 0.979  max 217.372
+   sent/recv     3000000 / 3000000   dropped 0   gaps 0
+   cpu           2.00 cores   ctx-sw 3v/34i   faults 385m/0M   heap allocs 0
+   spread        3 runs, throughput 1.00 to 1.00 M msg/s (median reported above)
+-- queue_latency / spsc-unpadded
+   payload       256 B, 1P/1C, capacity 4096, target 1000000 msg/s
+   duration      2.700 s (warmup 0.000 s)
+   throughput    1.000 M msg/s
+   latency us    p50 0.447  p95 0.505  p99 0.539  p99.9 0.839  max 22.072
+   sent/recv     3000000 / 3000000   dropped 0   gaps 0
+   cpu           2.00 cores   ctx-sw 3v/36i   faults 0m/0M   heap allocs 0
+   spread        3 runs, throughput 1.00 to 1.00 M msg/s (median reported above)
+-- queue_latency / mutex-queue
+   payload       1024 B, 1P/1C, capacity 4096, target 1000000 msg/s
+   duration      2.700 s (warmup 0.000 s)
+   throughput    1.000 M msg/s
+   latency us    p50 12.799  p95 44.799  p99 71.679  p99.9 121.343  max 191.135
+   sent/recv     3000000 / 3000000   dropped 0   gaps 0
+   cpu           1.52 cores   ctx-sw 1886446v/14i   faults 25m/0M   heap allocs 0
+   spread        3 runs, throughput 1.00 to 1.00 M msg/s (median reported above)
+-- queue_latency / spsc-padded
+   payload       1024 B, 1P/1C, capacity 4096, target 1000000 msg/s
+   duration      2.700 s (warmup 0.000 s)
+   throughput    1.000 M msg/s
+   latency us    p50 0.337  p95 0.439  p99 0.495  p99.9 0.703  max 24.557
+   sent/recv     3000000 / 3000000   dropped 0   gaps 0
+   cpu           2.00 cores   ctx-sw 3v/34i   faults 1793m/0M   heap allocs 0
+   spread        3 runs, throughput 1.00 to 1.00 M msg/s (median reported above)
+-- queue_latency / spsc-unpadded
+   payload       1024 B, 1P/1C, capacity 4096, target 1000000 msg/s
+   duration      2.700 s (warmup 0.000 s)
+   throughput    1.000 M msg/s
+   latency us    p50 0.415  p95 0.447  p99 0.485  p99.9 0.731  max 34.145
+   sent/recv     3000000 / 3000000   dropped 0   gaps 0
+   cpu           2.00 cores   ctx-sw 3v/41i   faults 0m/0M   heap allocs 0
+   spread        3 runs, throughput 1.00 to 1.00 M msg/s (median reported above)

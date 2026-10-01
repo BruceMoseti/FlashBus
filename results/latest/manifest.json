@@ -1,0 +1,95 @@
+{
+  "generated_utc": "2026-10-01T05:31:19.990579+00:00",
+  "quick": false,
+  "build": "/workspace/build/default",
+  "runs": [
+    {
+      "label": "05b_floor_50k",
+      "command": [
+        "/workspace/build/default/apps/flashbus-bench",
+        "--messages",
+        "250000",
+        "--payload",
+        "64",
+        "--rate",
+        "50000",
+        "--producers",
+        "1",
+        "--consumers",
+        "1",
+        "--variant",
+        "1p1c-50k",
+        "--csv",
+        "/workspace/results/latest/latency_floor.csv"
+      ],
+      "started_utc": "2026-10-01T05:30:59.957011+00:00",
+      "seconds": 5.00807
+    },
+    {
+      "label": "05b_floor_100k",
+      "command": [
+        "/workspace/build/default/apps/flashbus-bench",
+        "--messages",
+        "500000",
+        "--payload",
+        "64",
+        "--rate",
+        "100000",
+        "--producers",
+        "1",
+        "--consumers",
+        "1",
+        "--variant",
+        "1p1c-100k",
+        "--csv",
+        "/workspace/results/latest/latency_floor.csv"
+      ],
+      "started_utc": "2026-10-01T05:31:04.965113+00:00",
+      "seconds": 5.009308
+    },
+    {
+      "label": "05b_floor_200k",
+      "command": [
+        "/workspace/build/default/apps/flashbus-bench",
+        "--messages",
+        "1000000",
+        "--payload",
+        "64",
+        "--rate",
+        "200000",
+        "--producers",
+        "1",
+        "--consumers",
+        "1",
+        "--variant",
+        "1p1c-200k",
+        "--csv",
+        "/workspace/results/latest/latency_floor.csv"
+      ],
+      "started_utc": "2026-10-01T05:31:09.974451+00:00",
+      "seconds": 5.007938
+    },
+    {
+      "label": "05b_floor_400k",
+      "command": [
+        "/workspace/build/default/apps/flashbus-bench",
+        "--messages",
+        "2000000",
+        "--payload",
+        "64",
+        "--rate",
+        "400000",
+        "--producers",
+        "1",
+        "--consumers",
+        "1",
+        "--variant",
+        "1p1c-400k",
+        "--csv",
+        "/workspace/results/latest/latency_floor.csv"
+      ],
+      "started_utc": "2026-10-01T05:31:14.982414+00:00",
+      "seconds": 5.008143
+    }
+  ]
+}

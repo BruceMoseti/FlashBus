@@ -1,0 +1,32 @@
+# Which rules run. The ruff *version* is pinned separately, in the CI workflow:
+# selecting a rule group here is not enough on its own, because a new release
+# can add checks to a group that is already selected.
+#
+# The scripts here generate the numbers in the README, so a bug in one of them
+# is a documentation bug, and the rules worth enforcing are the ones that catch
+# that class of mistake.
+
+line-length = 100
+target-version = "py310"
+
+[lint]
+select = [
+  "E",      # pycodestyle
+  "F",      # pyflakes: unused imports and names, undefined names
+  "W",      # pycodestyle warnings
+  "I",      # import ordering
+  "B",      # bugbear: likely bugs rather than style
+  "C4",     # comprehension clarity
+  "ISC",    # implicit string concatenation -- a missing comma in a list of
+            # table cells would otherwise silently merge two of them
+  "PL",     # pylint subset
+  "RUF",    # ruff's own checks
+  "SIM",    # simplifiable constructs
+  "UP",     # pyupgrade
+  "EXE",    # shebang / executable-bit consistency
+]
+ignore = [
+  "PLR0912",  # too many branches: the report builders are flat by design
+  "PLR0915",  # too many statements: same
+  "PLR2004",  # magic values: benchmark thresholds read better inline
+]
