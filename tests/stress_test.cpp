@@ -23,6 +23,8 @@
 namespace flashbus {
 namespace {
 
+using testing::LoadBudget;
+using testing::load_budget;
 using testing::TestBroker;
 
 /// Scaled down automatically under sanitizers, which slow everything by an
@@ -222,10 +224,11 @@ TEST(Stress, PoolChurnKeepsBlocksDistinct) {
 // Full-path soak: real sockets, several publishers, several subscribers,
 // everything checked at the end.
 TEST(Stress, EndToEndSoak) {
-  constexpr int kPublishers = 3;
-  constexpr int kSubscribers = 3;
+  const LoadBudget budget = load_budget();
+  const int kPublishers = static_cast<int>(budget.publishers);
+  const int kSubscribers = static_cast<int>(budget.subscribers);
   const uint64_t per_publisher = scale(100'000);
-  const uint64_t total = per_publisher * kPublishers;
+  const uint64_t total = per_publisher * static_cast<uint64_t>(kPublishers);
 
   ServerConfig config;
   config.egress_capacity = 16384;
@@ -279,7 +282,7 @@ TEST(Stress, EndToEndSoak) {
       // How much load the pipeline survives before it has to drop is a
       // benchmark question, not a correctness one, and mixing the two gives a
       // test that fails whenever the machine is busy.
-      const Pacer pacer(150'000);
+      const Pacer pacer(budget.rate_per_publisher);
       for (uint64_t n = 0; n < per_publisher; ++n) {
         pacer.wait_for(n);
         if (!publisher.publish(kTopicTrades, payload.data(), payload.size())) break;

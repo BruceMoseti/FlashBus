@@ -9,6 +9,7 @@
 #include <thread>
 #include <vector>
 
+#include "flashbus/clock.hpp"
 #include "flashbus/publisher.hpp"
 #include "flashbus/subscriber.hpp"
 #include "test_broker.hpp"
@@ -251,9 +252,15 @@ TEST(EndToEnd, SequencesEachTopicIndependently) {
 
 // Several publishers on one topic interleave, but the broker sequence stays
 // contiguous, which is the property subscribers rely on for gap detection.
+//
+// The publishers are paced and their number comes from the core budget, for the
+// same reason as the soak test: egress is bounded and lossy by design, so
+// requiring zero loss from an unpaced multi-publisher burst would be requiring
+// something FlashBus explicitly does not promise. Sequence contiguity is the
+// property under test and pacing does not affect it.
 TEST(EndToEnd, MultiplePublishersShareAContiguousBrokerSequence) {
-  constexpr uint64_t kPerPublisher = 3000;
-  constexpr int kPublishers = 4;
+  const testing::LoadBudget budget = testing::load_budget();
+  const uint64_t per_publisher = 3000;
   TestBroker broker;
   SubscriberConfig config;
   config.blocking = false;
@@ -262,27 +269,30 @@ TEST(EndToEnd, MultiplePublishersShareAContiguousBrokerSequence) {
   ASSERT_TRUE(broker.wait_for_subscriptions(1));
 
   std::vector<std::thread> publishers;
-  for (int index = 0; index < kPublishers; ++index) {
+  for (unsigned index = 0; index < budget.publishers; ++index) {
     publishers.emplace_back([&, index] {
       Publisher publisher("127.0.0.1", broker.port());
-      const auto payload = payload_of(static_cast<uint64_t>(index), 32);
-      for (uint64_t i = 0; i < kPerPublisher; ++i) {
+      const auto payload = payload_of(index, 32);
+      const Pacer pacer(budget.rate_per_publisher);
+      for (uint64_t i = 0; i < per_publisher; ++i) {
+        pacer.wait_for(i);
         publisher.publish(kTopicTrades, payload.data(), payload.size());
       }
       publisher.flush();
     });
   }
 
-  constexpr size_t kTotal = kPerPublisher * kPublishers;
+  const size_t total = per_publisher * budget.publishers;
   uint64_t expected = 1;
   const size_t seen =
-      drain(subscriber, kTotal, [&](const MessageHeader& header, const std::byte*, size_t) {
+      drain(subscriber, total, [&](const MessageHeader& header, const std::byte*, size_t) {
         EXPECT_EQ(header.sequence, expected++);
       });
   for (std::thread& thread : publishers) thread.join();
 
-  EXPECT_EQ(seen, kTotal);
+  EXPECT_EQ(seen, total);
   EXPECT_EQ(subscriber.gaps(), 0u);
+  EXPECT_EQ(broker.stats().frames_dropped, 0u);
 }
 
 TEST(EndToEnd, SubscriberJoiningLateSeesNoFalseGap) {

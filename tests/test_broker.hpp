@@ -6,6 +6,7 @@
 // the bugs worth catching here live in the parts a mock would replace: partial
 // reads, the egress ring filling up, a session closing mid-stream.
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <thread>
@@ -15,10 +16,39 @@
 
 namespace flashbus::testing {
 
+/// How much load a correctness test may generate on this machine.
+///
+/// Every FlashBus loop spins before it parks, and the broker alone needs two
+/// threads. A test that hard-codes three publishers and three subscribers needs
+/// eight runnable threads; on a two-core CI runner it will report dropped
+/// events, which looks exactly like a backpressure bug and is not one. Load is
+/// therefore derived from the core count, and the correctness assertions hold
+/// at every size.
+struct LoadBudget {
+  unsigned publishers;
+  unsigned subscribers;
+  /// Paced, so that "nothing was dropped" is a property the test can require
+  /// rather than a hope about how fast the machine is.
+  uint64_t rate_per_publisher;
+};
+
+[[nodiscard]] inline LoadBudget load_budget() {
+  const unsigned cores = std::max(2u, std::thread::hardware_concurrency());
+  const unsigned spare = cores > 2 ? cores - 2 : 1;  // minus the broker's two
+  const unsigned publishers = std::clamp(spare / 2, 1u, 3u);
+  const unsigned subscribers = std::clamp(spare - publishers, 1u, 3u);
+  return {publishers, subscribers, 100'000};
+}
+
 class TestBroker {
  public:
   explicit TestBroker(ServerConfig config = {}) {
     config.port = 0;  // the kernel picks, so parallel test binaries never clash
+    // No spinning. Correctness tests do not measure latency, so the spin window
+    // buys them nothing and costs two cores that the publishers and subscribers
+    // need -- on a small CI runner that shows up as dropped events, which looks
+    // like a bug in the thing under test.
+    config.idle_spin_us = 0;
     server_ = std::make_unique<Server>(config);
     server_->start();
     port_ = server_->port();
