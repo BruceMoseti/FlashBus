@@ -86,14 +86,17 @@ def headline(results: Path) -> str:
     parts.append(f"Measured on {machine(end_to_end or queue)}\n")
 
     rows: list[list[str]] = []
-    e2e = [r for r in end_to_end if r["payload_bytes"] == "64"]
+    # Prefer the dedicated latency-floor sweep, which exists precisely so the
+    # headline figure comes from a run made to measure it.
+    floor = read(results, "latency_floor")
+    e2e = floor or [r for r in end_to_end if r["payload_bytes"] == "64"]
     if e2e:
-        r = e2e[0]
+        r = min(e2e, key=lambda row: float(row["p50_ns"]))
         rows.append([
-            "End-to-end over TCP, 64 B, 1 pub / 1 sub, paced at "
-            f"{int(r['target_rate']) // 1000}k msg/s",
-            f"p50 **{us(r['p50_ns'])} us**, p99 **{us(r['p99_ns'])} us**, "
-            f"p99.9 {us(r['p999_ns'])} us, 0 dropped",
+            ("End-to-end over TCP, 64 B, 1 pub / 1 sub, paced at "
+             f"{int(r['target_rate']) // 1000}k msg/s"),
+            (f"p50 **{us(r['p50_ns'])} us**, p99 **{us(r['p99_ns'])} us**, "
+             f"p99.9 {us(r['p999_ns'])} us, {r['messages_dropped']} dropped"),
         ])
 
     paced = [r for r in queue
@@ -106,10 +109,10 @@ def headline(results: Path) -> str:
         if spsc and mutex:
             rows.append([
                 "SPSC ring handoff, 64 B slots, paced below saturation",
-                f"p50 **{us(median(spsc, 'p50_ns'))} us**, "
-                f"p99 **{us(median(spsc, 'p99_ns'))} us** "
-                f"(mutex baseline: p50 {us(median(mutex, 'p50_ns'))} us, "
-                f"p99 {us(median(mutex, 'p99_ns'))} us)",
+                (f"p50 **{us(median(spsc, 'p50_ns'))} us**, "
+                 f"p99 **{us(median(spsc, 'p99_ns'))} us** "
+                 f"(mutex baseline: p50 {us(median(mutex, 'p50_ns'))} us, "
+                 f"p99 {us(median(mutex, 'p99_ns'))} us)"),
             ])
 
     saturated = [r for r in queue
@@ -122,8 +125,8 @@ def headline(results: Path) -> str:
         if spsc and mutex:
             rows.append([
                 "SPSC ring throughput, 64 B slots, saturated",
-                f"**{mps(median(spsc, 'throughput_msg_s'))} M msg/s** "
-                f"(mutex baseline: {mps(median(mutex, 'throughput_msg_s'))} M msg/s)",
+                (f"**{mps(median(spsc, 'throughput_msg_s'))} M msg/s** "
+                 f"(mutex baseline: {mps(median(mutex, 'throughput_msg_s'))} M msg/s)"),
             ])
 
     if ceiling:
@@ -132,8 +135,8 @@ def headline(results: Path) -> str:
             best = max(lossless, key=lambda r: float(r["throughput_msg_s"]))
             rows.append([
                 "Broker throughput ceiling, 64 B, zero loss",
-                f"**{mps(best['throughput_msg_s'])} M msg/s** delivered "
-                f"({pretty_topology(best['variant'])})",
+                (f"**{mps(best['throughput_msg_s'])} M msg/s** delivered "
+                 f"({pretty_topology(best['variant'])})"),
             ])
 
     if overload:
@@ -149,8 +152,8 @@ def headline(results: Path) -> str:
             best = max(carried, key=lambda r: int(r["target_rate"]))
             rows.append([
                 "Highest offered load carried in full, zero loss (4 pub / 1 sub, 64 B)",
-                f"**{mps(best['target_rate'])} M msg/s** at p50 {us(best['p50_ns'])} us, "
-                f"p99 {us(best['p99_ns'])} us",
+                (f"**{mps(best['target_rate'])} M msg/s** at p50 {us(best['p50_ns'])} us, "
+                 f"p99 {us(best['p99_ns'])} us"),
             ])
 
     if sustained:
@@ -159,10 +162,10 @@ def headline(results: Path) -> str:
         drift = (float(last["p99_ns"]) - float(first["p99_ns"])) / float(first["p99_ns"]) * 100
         steady_allocs = sum(int(r["allocations"]) for r in sustained[1:])
         rows.append([
-            f"Sustained {float(last['at_s']):.0f} s at "
-            f"{float(median(sustained, 'throughput_msg_s')) / 1000:.0f}k msg/s",
-            f"{total / 1e6:.0f} M events, **0 dropped**, p99 drift {drift:+.0f}%, "
-            f"**{steady_allocs} heap allocations** after the first interval",
+            (f"Sustained {float(last['at_s']):.0f} s at "
+             f"{float(median(sustained, 'throughput_msg_s')) / 1000:.0f}k msg/s"),
+            (f"{total / 1e6:.0f} M events, **0 dropped**, p99 drift {drift:+.0f}%, "
+             f"**{steady_allocs} heap allocations** after the first interval"),
         ])
 
     if rows:
@@ -187,6 +190,22 @@ def tables(results: Path) -> str:
         out.append("Charts, all drawn from the CSVs in this directory by "
                    "`scripts/plot_latency.py`:\n\n" +
                    "\n".join(f"* [{title}]({rel}/{name})" for name, title in present))
+
+    floor = read(results, "latency_floor")
+    if floor:
+        body = [[f"{int(r['target_rate']) // 1000}k", mps(r["throughput_msg_s"]),
+                 us(r["p50_ns"]), us(r["p95_ns"]), us(r["p99_ns"]), us(r["p999_ns"]),
+                 r["messages_dropped"]]
+                for r in sorted(floor, key=lambda r: int(r["target_rate"]))]
+        out.append("### End-to-end latency, 1 publisher / 1 subscriber, 64 B\n\n" +
+                   table(["offered rate", "delivered M msg/s", "p50 us", "p95 us", "p99 us",
+                          "p99.9 us", "dropped"], body) +
+                   "\n\nThe pipeline's own cost, well below saturation. Every event crosses "
+                   "two TCP hops, an encode, a decode, two SPSC rings and the dispatcher. "
+                   "Latency starts to climb at 200k msg/s not because the broker is saturated "
+                   "but because the publisher is: one `write()` per event tops out near 0.45 M "
+                   "msg/s on syscall rate, so above that the publisher's own send loop begins "
+                   "queueing.")
 
     e2e = read(results, "end_to_end")
     if e2e:

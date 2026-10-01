@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The correctness suite, four times: once plain and once under each
+  # sanitizer. The sanitizers are not optional extras here -- AddressSanitizer
+  # is what caught the out-of-bounds sequence table that every plain test run
+  # had passed over.
+  tests:
+    name: tests (${{ matrix.preset }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [default, asan, ubsan, tsan]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            g++ cmake ninja-build libboost-system-dev libgtest-dev
+
+      - name: Show the machine
+        # Load in the correctness suite scales with the core count, so it is
+        # worth recording what the runner actually provided.
+        run: |
+          nproc
+          g++ --version | head -1
+          cmake --version | head -1
+
+      - name: Configure
+        run: CXX=g++ cmake --preset ${{ matrix.preset }}
+
+      - name: Build
+        run: cmake --build build/${{ matrix.preset }} -j"$(nproc)"
+
+      - name: Test
+        run: ctest --test-dir build/${{ matrix.preset }} --output-on-failure -j1
+
+  # Warnings are errors here but not in the normal build, so that a contributor
+  # on a different compiler version is not blocked by a warning this one does
+  # not emit.
+  warnings:
+    name: no warnings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            g++ cmake libboost-system-dev libgtest-dev
+      - name: Build with -Werror
+        run: |
+          CXX=g++ cmake -S . -B build/werror \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_CXX_FLAGS="-Werror"
+          cmake --build build/werror -j"$(nproc)"
+
+  # Proves the benchmark harness and the apps still run. It does NOT produce
+  # measurements: a shared CI runner cannot measure latency, and publishing a
+  # number from one would be worse than publishing none. See
+  # docs/BENCHMARKING.md.
+  harness-smoke:
+    name: benchmark harness smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            g++ cmake libboost-system-dev libgtest-dev
+      - name: Build
+        run: |
+          CXX=g++ cmake --preset default
+          cmake --build build/default -j"$(nproc)"
+
+      - name: Every binary answers --help and rejects a bad flag
+        run: |
+          set -eux
+          for binary in build/default/apps/flashbus-{server,pub,sub,bench} \
+                        build/default/benchmarks/{clock,queue,alloc,affinity,sustained}_bench \
+                        build/default/examples/market_data/market-data-demo; do
+            "$binary" --help > /dev/null
+          done
+          # An unknown option must be rejected, not silently ignored: a typo in
+          # a benchmark flag is how people publish numbers for a configuration
+          # they never ran.
+          if build/default/apps/flashbus-pub --not-a-real-flag 2>/dev/null; then
+            echo "an unknown option was accepted" && exit 1
+          fi
+
+      - name: End-to-end over real sockets
+        run: |
+          set -eux
+          build/default/apps/flashbus-bench \
+            --messages 200000 --payload 64 --rate 100000 --warmup 200 \
+            --producers 1 --consumers 1
+          build/default/examples/market_data/market-data-demo \
+            --events 200000 --rate 100000
+
+      - name: Benchmark runner and report pipeline
+        run: |
+          set -eux
+          python3 -m pip install --quiet matplotlib
+          python3 scripts/run_benchmarks.py --quick \
+            --suite clock --suite allocation --out /tmp/ci-results
+          python3 scripts/plot_latency.py --results /tmp/ci-results
+          python3 scripts/check_regressions.py --candidate /tmp/ci-results
+
+  python-lint:
+    name: python scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 -m pip install --quiet ruff
+      - run: ruff check scripts/
+      - name: Scripts are syntactically valid and self-documenting
+        run: |
+          for script in scripts/*.py; do
+            python3 "$script" --help > /dev/null
+          done

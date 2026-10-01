@@ -14,6 +14,7 @@
 #include <bit>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <vector>
 
 #include "flashbus/memory_pool.hpp"
@@ -94,11 +95,16 @@ class OrderBook {
   [[nodiscard]] int64_t best_ask(uint32_t instrument) const {
     return book(instrument).best_ask;
   }
-  /// Negative when one side is empty, which is a real state and should not be
-  /// papered over with a zero.
-  [[nodiscard]] int64_t spread(uint32_t instrument) const {
+
+  /// Empty when either side has no price yet.
+  ///
+  /// `std::optional` rather than a negative sentinel: the spread can genuinely
+  /// be negative when the book is crossed, so any in-band sentinel collides
+  /// with a real value. An earlier version returned -1 for "one side empty"
+  /// and the demo duly printed a -2 next to a legend claiming -1 meant empty.
+  [[nodiscard]] std::optional<int64_t> spread(uint32_t instrument) const {
     const Book& b = book(instrument);
-    if (b.best_bid == kNoPrice || b.best_ask == kNoPrice) return -1;
+    if (b.best_bid == kNoPrice || b.best_ask == kNoPrice) return std::nullopt;
     return b.best_ask - b.best_bid;
   }
   [[nodiscard]] size_t live_orders() const { return live_orders_; }

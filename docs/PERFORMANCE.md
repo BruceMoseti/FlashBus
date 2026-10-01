@@ -59,7 +59,7 @@ behaves differently for an identifiable reason.
 **What happened.**
 
 At 64-byte slots the median improves 6x and p99 improves 16x. At 1024 bytes the
-median improves 28x and p99 improves **143x**. Two things in that pattern
+median improves 28x and p99 improves **144x**. Two things in that pattern
 matter more than the headline multiple:
 
 The tail improves far more than the median. A mutex does not make the average
@@ -336,9 +336,9 @@ Honest accounting of what has and has not been established here.
 
 **Established, with measurements:**
 
-* The SPSC ring beats a mutex queue by 2.0–2.5x on throughput and 16–143x at
-  p99, and its handoff cost is independent of payload size while the mutex
-  queue's is not.
+* The SPSC ring beats a mutex queue by 2.0-2.5x on throughput and by 13x to
+  144x at p99 depending on slot size, and its handoff cost is flat across a 32x
+  payload range (349 ns to 407 ns) while the mutex queue's degrades nearly 11x.
 * Ingress never drops an event, over every test in the suite, because reads are
   sized to what the ring can absorb and TCP flow control does the rest.
 * Egress loss happens only under genuine overload, is bounded by the configured

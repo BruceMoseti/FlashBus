@@ -1,131 +1,76 @@
 {
-  "generated_utc": "2026-10-01T04:24:29.774071+00:00",
+  "generated_utc": "2026-10-01T05:31:19.990579+00:00",
   "quick": false,
   "build": "/workspace/build/default",
   "runs": [
     {
-      "label": "08_batch_1",
+      "label": "05b_floor_50k",
       "command": [
         "/workspace/build/default/apps/flashbus-bench",
         "--messages",
-        "2500000",
+        "250000",
         "--payload",
         "64",
         "--rate",
-        "500000",
-        "--egress-batch",
+        "50000",
+        "--producers",
+        "1",
+        "--consumers",
         "1",
         "--variant",
-        "fixed-batch-1",
+        "1p1c-50k",
         "--csv",
-        "/workspace/results/latest/batching.csv"
+        "/workspace/results/latest/latency_floor.csv"
       ],
-      "started_utc": "2026-10-01T04:23:43.123814+00:00",
-      "seconds": 7.667261
+      "started_utc": "2026-10-01T05:30:59.957011+00:00",
+      "seconds": 5.00807
     },
     {
-      "label": "08_batch_8",
+      "label": "05b_floor_100k",
       "command": [
         "/workspace/build/default/apps/flashbus-bench",
         "--messages",
-        "2500000",
-        "--payload",
-        "64",
-        "--rate",
         "500000",
-        "--egress-batch",
-        "8",
-        "--variant",
-        "fixed-batch-8",
-        "--csv",
-        "/workspace/results/latest/batching.csv"
-      ],
-      "started_utc": "2026-10-01T04:23:50.791099+00:00",
-      "seconds": 6.676833
-    },
-    {
-      "label": "08_batch_32",
-      "command": [
-        "/workspace/build/default/apps/flashbus-bench",
-        "--messages",
-        "2500000",
         "--payload",
         "64",
         "--rate",
-        "500000",
-        "--egress-batch",
-        "32",
-        "--variant",
-        "fixed-batch-32",
-        "--csv",
-        "/workspace/results/latest/batching.csv"
-      ],
-      "started_utc": "2026-10-01T04:23:57.467957+00:00",
-      "seconds": 5.782281
-    },
-    {
-      "label": "08_batch_128",
-      "command": [
-        "/workspace/build/default/apps/flashbus-bench",
-        "--messages",
-        "2500000",
-        "--payload",
-        "64",
-        "--rate",
-        "500000",
-        "--egress-batch",
-        "128",
-        "--variant",
-        "fixed-batch-128",
-        "--csv",
-        "/workspace/results/latest/batching.csv"
-      ],
-      "started_utc": "2026-10-01T04:24:03.250261+00:00",
-      "seconds": 5.831801
-    },
-    {
-      "label": "08_batch_adaptive",
-      "command": [
-        "/workspace/build/default/apps/flashbus-bench",
-        "--messages",
-        "2500000",
-        "--payload",
-        "64",
-        "--rate",
-        "500000",
-        "--egress-batch",
-        "32",
-        "--adaptive-batching",
-        "--variant",
-        "adaptive-batch",
-        "--csv",
-        "/workspace/results/latest/batching.csv"
-      ],
-      "started_utc": "2026-10-01T04:24:09.082088+00:00",
-      "seconds": 5.008792
-    },
-    {
-      "label": "08_batch_1_saturated",
-      "command": [
-        "/workspace/build/default/apps/flashbus-bench",
-        "--messages",
-        "2000000",
-        "--payload",
-        "64",
-        "--rate",
-        "0",
-        "--egress-batch",
+        "100000",
+        "--producers",
+        "1",
+        "--consumers",
         "1",
         "--variant",
-        "saturated-batch-1",
+        "1p1c-100k",
         "--csv",
-        "/workspace/results/latest/batching_saturated.csv"
+        "/workspace/results/latest/latency_floor.csv"
       ],
-      "started_utc": "2026-10-01T04:24:14.090927+00:00",
-      "seconds": 6.215199
+      "started_utc": "2026-10-01T05:31:04.965113+00:00",
+      "seconds": 5.009308
     },
     {
-      "label": "08_batch_32_saturated",
+      "label": "05b_floor_200k",
+      "command": [
+        "/workspace/build/default/apps/flashbus-bench",
+        "--messages",
+        "1000000",
+        "--payload",
+        "64",
+        "--rate",
+        "200000",
+        "--producers",
+        "1",
+        "--consumers",
+        "1",
+        "--variant",
+        "1p1c-200k",
+        "--csv",
+        "/workspace/results/latest/latency_floor.csv"
+      ],
+      "started_utc": "2026-10-01T05:31:09.974451+00:00",
+      "seconds": 5.007938
+    },
+    {
+      "label": "05b_floor_400k",
       "command": [
         "/workspace/build/default/apps/flashbus-bench",
         "--messages",
@@ -133,36 +78,18 @@
         "--payload",
         "64",
         "--rate",
-        "0",
-        "--egress-batch",
-        "32",
+        "400000",
+        "--producers",
+        "1",
+        "--consumers",
+        "1",
         "--variant",
-        "saturated-batch-32",
+        "1p1c-400k",
         "--csv",
-        "/workspace/results/latest/batching_saturated.csv"
+        "/workspace/results/latest/latency_floor.csv"
       ],
-      "started_utc": "2026-10-01T04:24:20.306168+00:00",
-      "seconds": 4.996824
-    },
-    {
-      "label": "08_batch_128_saturated",
-      "command": [
-        "/workspace/build/default/apps/flashbus-bench",
-        "--messages",
-        "2000000",
-        "--payload",
-        "64",
-        "--rate",
-        "0",
-        "--egress-batch",
-        "128",
-        "--variant",
-        "saturated-batch-128",
-        "--csv",
-        "/workspace/results/latest/batching_saturated.csv"
-      ],
-      "started_utc": "2026-10-01T04:24:25.303038+00:00",
-      "seconds": 4.471013
+      "started_utc": "2026-10-01T05:31:14.982414+00:00",
+      "seconds": 5.008143
     }
   ]
 }

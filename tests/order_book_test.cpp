@@ -96,11 +96,23 @@ TEST(OrderBook, QuoteUpdatesTrackTheTopOfBook) {
   EXPECT_EQ(book.spread(1), 60);
 }
 
-TEST(OrderBook, SpreadIsNegativeWhenOneSideIsEmpty) {
+TEST(OrderBook, SpreadIsEmptyUntilBothSidesHaveAPrice) {
   OrderBook<PooledOrderStore> book(16, 1);
-  EXPECT_EQ(book.spread(0), -1);
+  EXPECT_FALSE(book.spread(0).has_value());
   book.apply(make_event(EventType::kBidUpdate, 0, 100, 1, Side::kBid));
-  EXPECT_EQ(book.spread(0), -1);
+  EXPECT_FALSE(book.spread(0).has_value()) << "one side priced is not a spread";
+  book.apply(make_event(EventType::kAskUpdate, 0, 104, 1, Side::kAsk));
+  EXPECT_EQ(book.spread(0), 4);
+}
+
+// A crossed book has a genuinely negative spread, which is why the accessor
+// returns optional rather than using a negative sentinel for "no spread".
+TEST(OrderBook, CrossedBookReportsANegativeSpread) {
+  OrderBook<PooledOrderStore> book(16, 1);
+  book.apply(make_event(EventType::kBidUpdate, 0, 110, 1, Side::kBid));
+  book.apply(make_event(EventType::kAskUpdate, 0, 108, 1, Side::kAsk));
+  ASSERT_TRUE(book.spread(0).has_value());
+  EXPECT_EQ(*book.spread(0), -2);
 }
 
 TEST(OrderBook, KeepsEveryOrderDistinctAcrossHashCollisions) {

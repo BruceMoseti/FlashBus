@@ -14,7 +14,6 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -45,7 +44,9 @@ class Runner:
         if self.dry_run:
             return
         started = datetime.datetime.now(datetime.timezone.utc)
-        result = subprocess.run(command, capture_output=True, text=True)
+        # check=False: the return code is inspected below so that the label
+        # and the command appear in the failure message.
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
         print(result.stdout, end="")
         if result.returncode != 0:
             print(result.stderr, file=sys.stderr, end="")
@@ -143,7 +144,8 @@ def end_to_end(runner: Runner) -> None:
                  if payload == 64 else [])
         runner.run(f"05_payload_{payload}B", bench,
                    ["--messages", str(runner.messages_for(200_000, 5)), "--payload", str(payload),
-                    "--rate", "200000", "--variant", f"payload-{payload}B", "--csv", csv] + extra)
+                    "--rate", "200000", "--variant", f"payload-{payload}B", "--csv", csv,
+                    *extra])
 
     # The overload curve: latency, loss and queue depth against offered load.
     #
@@ -179,6 +181,23 @@ def end_to_end(runner: Runner) -> None:
                     "--rate", "400000", "--producers", str(producers),
                     "--consumers", str(consumers), "--variant", f"{producers}p{consumers}c",
                     "--csv", fanout_csv])
+
+
+def latency_floor(runner: Runner) -> None:
+    """The lowest end-to-end latency this machine reaches, and how it rises.
+
+    One publisher, one subscriber, well below saturation, so the number is the
+    pipeline's own cost rather than queueing. This is the figure the README
+    quotes, so it gets its own suite and its own CSV instead of being lifted
+    out of a sweep that was run for another purpose.
+    """
+    bench = runner.binary("apps", "flashbus-bench")
+    csv = str(runner.out / "latency_floor.csv")
+    for rate in (50_000, 100_000, 200_000, 400_000):
+        runner.run(f"05b_floor_{rate // 1000}k", bench,
+                   ["--messages", str(runner.messages_for(rate, 5)), "--payload", "64",
+                    "--rate", str(rate), "--producers", "1", "--consumers", "1",
+                    "--variant", f"1p1c-{rate // 1000}k", "--csv", csv])
 
 
 def batching(runner: Runner) -> None:
@@ -248,6 +267,7 @@ SUITES = {
     "allocation": allocation,
     "affinity": affinity,
     "end_to_end": end_to_end,
+    "latency": latency_floor,
     "batching": batching,
     "spin": spin_vs_park,
     "market": market_data,

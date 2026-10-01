@@ -5,6 +5,7 @@
 // state at the end, so a run can be checked rather than just admired.
 
 #include <atomic>
+#include <optional>
 #include <iomanip>
 #include <iostream>
 #include <thread>
@@ -89,7 +90,7 @@ int main(int argc, char** argv) {
   std::atomic<bool> publisher_done{false};
   uint64_t received = 0, gaps = 0, missing = 0, book_applied = 0, unknown_orders = 0;
   uint64_t store_high_water = 0, store_exhausted = 0;
-  std::vector<int64_t> final_spreads;
+  std::vector<std::optional<int64_t>> final_spreads;
 
   std::thread consumer_thread([&] {
     SubscriberConfig config;
@@ -244,8 +245,19 @@ int main(int argc, char** argv) {
             << "Order store:   high water " << store_high_water << ", exhausted "
             << store_exhausted << ", unknown-order events " << unknown_orders << '\n';
   std::cout << "Final spreads: ";
-  for (const int64_t spread : final_spreads) std::cout << spread << ' ';
-  std::cout << "(ticks, -1 = one side empty)\n";
+  for (const std::optional<int64_t>& spread : final_spreads) {
+    if (!spread) {
+      std::cout << "n/a ";
+    } else if (*spread < 0) {
+      // The generator moves each side from a random walk independently, so a
+      // stale bid can sit above a fresh ask. Real feeds cross transiently too;
+      // saying so beats printing a bare negative number.
+      std::cout << *spread << "(crossed) ";
+    } else {
+      std::cout << *spread << ' ';
+    }
+  }
+  std::cout << "ticks\n";
 
   // A gap means FlashBus dropped events for this subscriber. The book then
   // legitimately sees cancels for orders it never got, and saying so is the
