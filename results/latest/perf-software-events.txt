@@ -1,0 +1,32 @@
+note: /usr/bin/perf cannot count even task-clock; skipping it
+perf:            /usr/lib/linux-tools/6.8.0-31-generic/perf
+paranoid level:  2  (needs <= 2 for user-space counters, or run as root)
+
+NOT available here: cycles instructions branches branch-misses cache-references cache-misses stalled-cycles-frontend
+
+  No hardware PMU. This is almost certainly a VM without a virtual PMU.
+  Cache, branch and cycle counts cannot be measured on this machine, so any
+  microarchitectural claim has to come from a bare-metal host instead.
+
+collecting: task-clock context-switches cpu-migrations page-faults minor-faults major-faults
+
+=== perf stat -e task-clock,context-switches,cpu-migrations,page-faults,minor-faults,major-faults -- build/default/benchmarks/queue_bench --messages 20000000 --payload 48 --mode throughput
+CPU:          Intel(R) Xeon(R) Processor (8 logical)
+
+--- perf stat output ---
+
+ Performance counter stats for 'build/default/benchmarks/queue_bench --messages 20000000 --payload 48 --mode throughput':
+
+         44,981.67 msec task-clock:u                     #    1.737 CPUs utilized             
+                 0      context-switches:u               #    0.000 /sec                      
+                 0      cpu-migrations:u                 #    0.000 /sec                      
+               514      page-faults:u                    #   11.427 /sec                      
+               514      minor-faults:u                   #   11.427 /sec                      
+                 0      major-faults:u                   #    0.000 /sec                      
+
+      25.901709277 seconds time elapsed
+
+      34.917494000 seconds user
+      11.073156000 seconds sys
+
+

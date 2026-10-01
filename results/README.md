@@ -40,6 +40,7 @@ always be traced back to the conditions behind it, or dismissed on the evidence.
 | `sustained.csv` | 300 seconds at 300k msg/s, one row per interval |
 | `market_data.csv` | the synthetic feed into the order-book consumer |
 | `latency_histogram.csv` | full histogram buckets, for the distribution chart |
+| `perf-software-events.txt` | `scripts/run_perf.sh` output on this host: the evidence that no hardware PMU is available, and the software events that are |
 
 ## Regenerating
 
@@ -70,7 +71,8 @@ Please read `docs/BENCHMARKING.md` first. The three things that matter most:
 - **One machine**, a shared 8-vCPU KVM guest with no virtual PMU, no CPU
   isolation, no cpufreq control and loopback networking. The relative
   comparisons are far more durable than the absolutes.
-- **No hardware counters.** `hw_pmu_available` is 0 in every row here, so no
+- **No hardware counters.** `hw_pmu_available` is 0 in every row here, and
+  `perf-software-events.txt` is the probe output that establishes it. So no
   claim about cycles, branches or cache misses is made anywhere in this
   repository. Where a cache-level explanation is offered it is labelled a
   hypothesis, with the experiment that would settle it named.
