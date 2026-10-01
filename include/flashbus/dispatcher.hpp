@@ -21,7 +21,7 @@ struct DispatcherConfig {
   /// hot publisher cannot starve the others.
   size_t ingress_batch = 64;
   int cpu = -1;
-  size_t spin_iterations = 2000;
+  unsigned idle_spin_us = 500;
   unsigned idle_sleep_us = 50;
 };
 

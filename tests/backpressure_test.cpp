@@ -10,6 +10,7 @@
 #include <thread>
 #include <vector>
 
+#include "flashbus/clock.hpp"
 #include "flashbus/publisher.hpp"
 #include "flashbus/subscriber.hpp"
 #include "test_broker.hpp"
@@ -111,10 +112,13 @@ TEST(Backpressure, EgressRingNeverExceedsCapacity) {
   EXPECT_LE(broker.stats().egress_high_water, 256u);
 }
 
-TEST(Backpressure, IngressRejectionIsCountedNotBuffered) {
+// Ingress is flow-controlled rather than lossy: the broker reads only what its
+// ingress ring can hold, so the TCP receive window closes and the publisher is
+// throttled. A ring of two frames makes that the dominant effect, and still
+// nothing may be lost.
+TEST(Backpressure, TinyIngressRingThrottlesThePublisherWithoutLoss) {
+  constexpr uint64_t kCount = 50000;
   ServerConfig config;
-  // A tiny ingress ring and a dispatcher that sleeps readily: the network
-  // thread will decode faster than the dispatcher drains.
   config.ingress_capacity = 2;
   config.egress_capacity = 4096;
   TestBroker broker(config);
@@ -125,33 +129,37 @@ TEST(Backpressure, IngressRejectionIsCountedNotBuffered) {
   subscriber.subscribe(kTopicTrades);
   ASSERT_TRUE(broker.wait_for_subscriptions(1));
 
-  Publisher publisher("127.0.0.1", broker.port());
-  const auto payload = payload_of(64);
-  for (int i = 0; i < 400000; ++i) {
-    publisher.publish(kTopicTrades, payload.data(), payload.size());
-  }
-  publisher.flush();
+  std::thread publisher_thread([&] {
+    Publisher publisher("127.0.0.1", broker.port());
+    const auto payload = payload_of(64);
+    for (uint64_t i = 0; i < kCount; ++i) {
+      publisher.publish(kTopicTrades, payload.data(), payload.size());
+    }
+    publisher.flush();
+  });
 
-  // Whether rejection actually triggers depends on the machine, so this asserts
-  // the invariant rather than the outcome: nothing is ever silently lost.
-  EXPECT_TRUE(TestBroker::wait_until(
-      [&] {
-        subscriber.poll([](const MessageHeader&, const std::byte*, size_t) {});
-        const ServerStats stats = broker.stats();
-        return stats.frames_in + stats.frames_rejected >= 400000;
-      },
-      20.0));
-  const ServerStats stats = broker.stats();
-  // frames_in also counts the subscriber's SUBSCRIBE frame, hence the offset.
-  EXPECT_EQ(stats.frames_in + stats.frames_rejected - stats.subscriptions, 400000u)
-      << "frames went missing without being counted as rejected";
+  uint64_t received = 0;
+  const uint64_t deadline = now_ns() + 60'000'000'000;
+  while (received < kCount && now_ns() < deadline && subscriber.connected()) {
+    received += subscriber.poll([](const MessageHeader&, const std::byte*, size_t) {});
+  }
+  publisher_thread.join();
+
+  EXPECT_EQ(received, kCount)
+      << "a two-frame ingress ring should slow the publisher down, not lose its events";
+  EXPECT_EQ(broker.stats().frames_rejected, 0u)
+      << "ingress rejected frames; the read-size bound in Session::ensure_read_armed is wrong";
+  EXPECT_EQ(subscriber.gaps(), 0u);
 }
 
-// The property that matters most: one subscriber falling over must not move
-// another subscriber's latency.
+// The property that matters most: one subscriber falling over must not cost
+// another subscriber its events.
 TEST(Backpressure, SlowConsumerDoesNotStallHealthyOnes) {
+  constexpr uint64_t kCount = 60000;
   ServerConfig config;
-  config.egress_capacity = 512;
+  // Sized so a subscriber that actually reads can keep up. The point here is
+  // isolation, not how small a queue can get.
+  config.egress_capacity = 8192;
   config.policy = OverflowPolicy::kDropNewest;
   TestBroker broker(config);
 
@@ -162,20 +170,21 @@ TEST(Backpressure, SlowConsumerDoesNotStallHealthyOnes) {
   StalledSubscriber stalled(broker.port(), kTopicTrades);
   ASSERT_TRUE(broker.wait_for_subscriptions(2));
 
-  constexpr uint64_t kCount = 50000;
-  std::atomic<bool> publishing{true};
   std::thread publisher_thread([&] {
     Publisher publisher("127.0.0.1", broker.port());
     const auto payload = payload_of(256);
+    // Paced below what the healthy subscriber can take, so any loss it suffers
+    // is attributable to the stalled one rather than to raw overload.
+    const Pacer pacer(200'000);
     for (uint64_t i = 0; i < kCount; ++i) {
+      pacer.wait_for(i);
       publisher.publish(kTopicTrades, payload.data(), payload.size());
     }
     publisher.flush();
-    publishing.store(false, std::memory_order_release);
   });
 
   uint64_t received = 0;
-  const uint64_t deadline = now_ns() + 20'000'000'000;
+  const uint64_t deadline = now_ns() + 60'000'000'000;
   while (received < kCount && now_ns() < deadline && fast.connected()) {
     received += fast.poll([](const MessageHeader&, const std::byte*, size_t) {});
   }
@@ -188,6 +197,10 @@ TEST(Backpressure, SlowConsumerDoesNotStallHealthyOnes) {
       << "the stalled subscriber should have been the one losing events";
 }
 
+// With BLOCK, the dispatcher waits for room instead of dropping. Because
+// ingress is flow-controlled rather than lossy, that wait propagates back
+// through the ingress ring to the publisher's own write() and nothing is lost
+// anywhere — which is what BLOCK is for, and why it is not the default.
 TEST(Backpressure, BlockPolicyDoesNotLoseEvents) {
   ServerConfig config;
   config.egress_capacity = 64;

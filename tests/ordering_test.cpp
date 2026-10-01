@@ -36,6 +36,33 @@ std::vector<std::byte> payload_of(uint64_t value, size_t size) {
   return payload;
 }
 
+/// Publishes on its own thread so the test can read while it writes.
+///
+/// This is not test scaffolding for its own sake: a subscriber that publishes
+/// everything first and only then starts reading is asking the broker to buffer
+/// the whole stream, and FlashBus deliberately does not. Bounded queues mean a
+/// subscriber has to keep up.
+class BackgroundPublisher {
+ public:
+  template <typename Fn>
+  BackgroundPublisher(uint16_t port, Fn&& body)
+      : thread_([port, body = std::forward<Fn>(body)]() mutable {
+          Publisher publisher("127.0.0.1", port);
+          body(publisher);
+          publisher.flush();
+        }) {}
+
+  ~BackgroundPublisher() {
+    if (thread_.joinable()) thread_.join();
+  }
+  void join() {
+    if (thread_.joinable()) thread_.join();
+  }
+
+ private:
+  std::thread thread_;
+};
+
 TEST(EndToEnd, DeliversEveryEventInOrder) {
   constexpr uint64_t kCount = 20000;
   TestBroker broker;
@@ -46,12 +73,12 @@ TEST(EndToEnd, DeliversEveryEventInOrder) {
   subscriber.subscribe(kTopicTrades);
   ASSERT_TRUE(broker.wait_for_subscriptions(1));
 
-  Publisher publisher("127.0.0.1", broker.port());
-  for (uint64_t i = 1; i <= kCount; ++i) {
-    const auto payload = payload_of(i, 64);
-    ASSERT_TRUE(publisher.publish(kTopicTrades, payload.data(), payload.size()));
-  }
-  publisher.flush();
+  BackgroundPublisher sender(broker.port(), [](Publisher& publisher) {
+    for (uint64_t i = 1; i <= kCount; ++i) {
+      const auto payload = payload_of(i, 64);
+      publisher.publish(kTopicTrades, payload.data(), payload.size());
+    }
+  });
 
   uint64_t expected_payload = 1;
   uint64_t expected_sequence = 1;
@@ -66,10 +93,14 @@ TEST(EndToEnd, DeliversEveryEventInOrder) {
     ++expected_payload;
     ++expected_sequence;
   });
+  sender.join();
 
   EXPECT_EQ(seen, kCount);
   EXPECT_EQ(subscriber.gaps(), 0u);
   EXPECT_EQ(subscriber.missing(), 0u);
+  const ServerStats stats = broker.stats();
+  EXPECT_EQ(stats.frames_dropped, 0u);
+  EXPECT_EQ(stats.frames_rejected, 0u) << "ingress is flow-controlled; it must never reject";
 }
 
 TEST(EndToEnd, PreservesOrderAcrossPayloadSizes) {
@@ -82,16 +113,16 @@ TEST(EndToEnd, PreservesOrderAcrossPayloadSizes) {
 
   // Varying sizes make every frame boundary land somewhere different in the
   // TCP stream, which is where a decoder bug would show up.
-  const std::vector<size_t> sizes = {0, 1, 7, 32, 63, 64, 65, 200, 512, 1024};
-  Publisher publisher("127.0.0.1", broker.port());
-  uint64_t value = 0;
-  for (int round = 0; round < 200; ++round) {
-    for (const size_t size : sizes) {
-      const auto payload = payload_of(++value, size);
-      ASSERT_TRUE(publisher.publish(kTopicQuotes, payload.data(), size));
+  static const std::vector<size_t> sizes = {0, 1, 7, 32, 63, 64, 65, 200, 512, 1024};
+  BackgroundPublisher sender(broker.port(), [](Publisher& publisher) {
+    uint64_t value = 0;
+    for (int round = 0; round < 200; ++round) {
+      for (const size_t size : sizes) {
+        const auto payload = payload_of(++value, size);
+        publisher.publish(kTopicQuotes, payload.data(), size);
+      }
     }
-  }
-  publisher.flush();
+  });
   const size_t total = sizes.size() * 200;
 
   size_t index = 0;
@@ -106,6 +137,7 @@ TEST(EndToEnd, PreservesOrderAcrossPayloadSizes) {
         }
         ++index;
       });
+  sender.join();
   EXPECT_EQ(seen, total);
   EXPECT_EQ(subscriber.gaps(), 0u);
 }
@@ -123,22 +155,35 @@ TEST(EndToEnd, FansOutToEverySubscriber) {
   }
   ASSERT_TRUE(broker.wait_for_subscriptions(3));
 
-  Publisher publisher("127.0.0.1", broker.port());
-  for (uint64_t i = 1; i <= kCount; ++i) {
-    const auto payload = payload_of(i, 32);
-    publisher.publish(kTopicTrades, payload.data(), payload.size());
-  }
-  publisher.flush();
+  BackgroundPublisher sender(broker.port(), [](Publisher& publisher) {
+    for (uint64_t i = 1; i <= kCount; ++i) {
+      const auto payload = payload_of(i, 32);
+      publisher.publish(kTopicTrades, payload.data(), payload.size());
+    }
+  });
 
-  for (auto& subscriber : subscribers) {
-    uint64_t expected = 1;
-    const size_t seen = drain(*subscriber, kCount,
-                              [&](const MessageHeader& header, const std::byte*, size_t) {
-                                EXPECT_EQ(header.sequence, expected++);
-                              });
-    EXPECT_EQ(seen, kCount);
-    EXPECT_EQ(subscriber->gaps(), 0u);
+  // All three are drained in one round-robin loop: draining them one after
+  // another would leave the others' bounded queues to overflow while they wait.
+  std::vector<uint64_t> expected(subscribers.size(), 1);
+  std::vector<size_t> seen(subscribers.size(), 0);
+  const uint64_t deadline = now_ns() + 20'000'000'000;
+  bool done = false;
+  while (!done && now_ns() < deadline) {
+    done = true;
+    for (size_t i = 0; i < subscribers.size(); ++i) {
+      seen[i] += subscribers[i]->poll([&](const MessageHeader& header, const std::byte*, size_t) {
+        EXPECT_EQ(header.sequence, expected[i]++);
+      });
+      if (seen[i] < kCount) done = false;
+    }
   }
+  sender.join();
+
+  for (size_t i = 0; i < subscribers.size(); ++i) {
+    EXPECT_EQ(seen[i], kCount) << "subscriber " << i << " did not receive the whole stream";
+    EXPECT_EQ(subscribers[i]->gaps(), 0u);
+  }
+  EXPECT_EQ(broker.stats().frames_dropped, 0u);
 }
 
 TEST(EndToEnd, DoesNotDeliverOtherTopics) {

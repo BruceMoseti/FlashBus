@@ -39,6 +39,8 @@ struct Options {
   int dispatcher_cpu = -1;
   int first_producer_cpu = -1;
   int first_consumer_cpu = -1;
+  unsigned idle_spin_us = 500;
+  unsigned idle_sleep_us = 50;
   std::string csv;
   std::string variant = "tcp-end-to-end";
 };
@@ -71,7 +73,8 @@ int main(int argc, char** argv) {
   args.reject_unknown({"producers", "consumers", "messages", "payload", "rate", "warmup",
                        "publisher-batch", "egress-batch", "adaptive-batching", "egress-capacity",
                        "ingress-capacity", "policy", "network-cpu", "dispatcher-cpu",
-                       "producer-cpu", "consumer-cpu", "csv", "variant", "help"});
+                       "producer-cpu", "consumer-cpu", "idle-spin-us", "idle-sleep-us",
+                       "csv", "variant", "help"});
   if (args.flag("help")) {
     std::cout
         << "usage: flashbus-bench [--producers N] [--consumers N] [--messages N] "
@@ -82,6 +85,7 @@ int main(int argc, char** argv) {
            "[--egress-capacity N]\n"
            "                      [--ingress-capacity N] [--policy NAME] [--network-cpu N]\n"
            "                      [--dispatcher-cpu N] [--producer-cpu N] [--consumer-cpu N]\n"
+           "                      [--idle-spin-us N] [--idle-sleep-us N]\n"
            "                      [--csv PATH] [--variant NAME]\n"
            "  --messages is the total published across all producers; each consumer is\n"
            "  subscribed to the same topic, so each one should receive all of them.\n"
@@ -105,6 +109,8 @@ int main(int argc, char** argv) {
   options.dispatcher_cpu = args.number<int>("dispatcher-cpu", -1);
   options.first_producer_cpu = args.number<int>("producer-cpu", -1);
   options.first_consumer_cpu = args.number<int>("consumer-cpu", -1);
+  options.idle_spin_us = args.number<unsigned>("idle-spin-us", options.idle_spin_us);
+  options.idle_sleep_us = args.number<unsigned>("idle-sleep-us", options.idle_sleep_us);
   options.csv = args.string("csv", "");
   options.variant = args.string("variant", options.variant);
 
@@ -134,6 +140,8 @@ int main(int argc, char** argv) {
   server_config.policy = options.policy;
   server_config.network_cpu = options.network_cpu;
   server_config.dispatcher_cpu = options.dispatcher_cpu;
+  server_config.idle_spin_us = options.idle_spin_us;
+  server_config.idle_sleep_us = options.idle_sleep_us;
 
   Server server(server_config);
   try {

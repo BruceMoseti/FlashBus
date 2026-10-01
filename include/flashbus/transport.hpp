@@ -90,9 +90,17 @@ struct ServerConfig {
   /// the affinity experiment says otherwise on a given machine.
   int network_cpu = -1;
   int dispatcher_cpu = -1;
-  /// Idle iterations before the loop sleeps instead of spinning. Under load
-  /// neither loop ever reaches this.
-  size_t spin_iterations = 2000;
+  /// How long a loop keeps spinning after its last piece of work before it
+  /// parks. Measured in time, not iterations: the dispatcher's idle iteration
+  /// costs about 8 ns and the network loop's costs hundreds, so an iteration
+  /// count means something different on each loop and something different again
+  /// on the next machine. Sized to cover the gap between events at the rates
+  /// FlashBus is for; below that it parks and gives the core back.
+  unsigned idle_spin_us = 500;
+  /// How long a parked loop stays parked before looking again. The network loop
+  /// parks in epoll, so a socket event wakes it early; the dispatcher has no
+  /// descriptor to wait on, so for it this is a real sleep and a real addition
+  /// to the latency of the event that ends an idle period.
   unsigned idle_sleep_us = 50;
 };
 

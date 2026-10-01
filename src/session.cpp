@@ -37,16 +37,29 @@ Session::Session(boost::asio::ip::tcp::socket socket, ChannelPtr channel, Sessio
   configure(socket_);
 }
 
-void Session::start() { arm_read(); }
+void Session::ensure_read_armed() {
+  if (read_in_flight_ || closed()) return;
 
-void Session::arm_read() {
-  if (closed()) return;
-  read_armed_ = true;
+  // Read only as many bytes as the ingress ring can certainly absorb.
+  //
+  // Every frame is at least kHeaderSize bytes, and the decoder holds at most
+  // one incomplete frame, so reading (free - 1) * kHeaderSize bytes can yield
+  // at most `free` frames. Below two free slots there is no safe read size, so
+  // nothing is read at all and the receive window closes.
+  const size_t free_slots = channel_->ingress.capacity() - channel_->ingress.size();
+  if (free_slots < 2) {
+    read_stalled_ = true;
+    return;
+  }
+  read_stalled_ = false;
+  const size_t limit = std::min(read_buffer_.size(), (free_slots - 1) * kHeaderSize);
+
+  read_in_flight_ = true;
   auto self = shared_from_this();
   socket_.async_read_some(
-      boost::asio::buffer(read_buffer_.data(), read_buffer_.size()),
+      boost::asio::buffer(read_buffer_.data(), limit),
       [this, self](const boost::system::error_code& error, std::size_t bytes) {
-        read_armed_ = false;
+        read_in_flight_ = false;
         if (error) {
           close();
           return;
@@ -62,9 +75,7 @@ void Session::arm_read() {
           // where the next real header starts.
           decode_error_ = decode_error;
           close();
-          return;
         }
-        arm_read();
       });
 }
 
@@ -75,7 +86,9 @@ void Session::on_frame(const MessageHeader& header, const std::byte* payload, si
   }
   Frame* slot = channel_->ingress.claim();
   if (slot == nullptr) {
-    // Ingress backpressure: the dispatcher is behind. Counted, not buffered.
+    // Unreachable if arm_read()'s bound is right. Counted rather than asserted,
+    // so that a wrong bound shows up as a number in the stats instead of as
+    // events that quietly disappear. The tests check it stays zero.
     channel_->net.frames_rejected.increment();
     return;
   }
@@ -102,28 +115,33 @@ size_t Session::pump_egress() {
     if (socket_.is_open()) close();
     return 0;
   }
-  if (write_pending()) {
+
+  // Drains as much as the socket will take. The batch size controls how many
+  // frames share one write() call, not how many frames may leave per event-loop
+  // iteration: capping the latter would throttle egress far below the rate at
+  // which one 64 KiB read fills the ingress ring, and the egress ring would
+  // overflow for no reason other than the cap.
+  size_t frames_written = 0;
+  for (;;) {
+    if (write_pending()) {
+      flush();
+      if (write_pending()) break;  // kernel send buffer is full; resume later
+    }
+    size_t frames = 0;
+    channel_->egress.consume(batch_size(), [&](Frame& frame) {
+      const size_t payload_size = frame.header.payload_size;
+      std::byte* out = write_buffer_.data() + write_tail_;
+      encode_header(out, frame.header);
+      std::memcpy(out + kHeaderSize, frame.payload, payload_size);
+      write_tail_ += kHeaderSize + payload_size;
+      ++frames;
+    });
+    if (frames == 0) break;
+    channel_->net.frames_delivered.increment(frames);
+    frames_written += frames;
     flush();
-    if (write_pending()) return 0;  // kernel buffer is full; retry next poll
   }
-
-  size_t frames = 0;
-  size_t bytes = 0;
-  channel_->egress.consume(batch_size(), [&](Frame& frame) {
-    const size_t payload_size = frame.header.payload_size;
-    std::byte* out = write_buffer_.data() + write_tail_;
-    encode_header(out, frame.header);
-    std::memcpy(out + kHeaderSize, frame.payload, payload_size);
-    write_tail_ += kHeaderSize + payload_size;
-    ++frames;
-    bytes += kHeaderSize + payload_size;
-  });
-
-  if (frames == 0) return 0;
-  channel_->net.frames_delivered.increment(frames);
-  (void)bytes;
-  flush();
-  return frames;
+  return frames_written;
 }
 
 void Session::flush() {

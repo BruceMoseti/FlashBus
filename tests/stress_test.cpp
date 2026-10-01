@@ -12,6 +12,7 @@
 #include <thread>
 #include <vector>
 
+#include "flashbus/clock.hpp"
 #include "flashbus/memory_pool.hpp"
 #include "flashbus/protocol.hpp"
 #include "flashbus/publisher.hpp"
@@ -274,7 +275,13 @@ TEST(Stress, EndToEndSoak) {
     writers.emplace_back([&, i] {
       Publisher publisher("127.0.0.1", broker.port());
       std::vector<std::byte> payload(64, static_cast<std::byte>(i));
+      // Paced, so that zero loss is a property this test can actually require.
+      // How much load the pipeline survives before it has to drop is a
+      // benchmark question, not a correctness one, and mixing the two gives a
+      // test that fails whenever the machine is busy.
+      const Pacer pacer(150'000);
       for (uint64_t n = 0; n < per_publisher; ++n) {
+        pacer.wait_for(n);
         if (!publisher.publish(kTopicTrades, payload.data(), payload.size())) break;
       }
       publisher.flush();

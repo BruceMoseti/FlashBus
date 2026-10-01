@@ -4,6 +4,7 @@
 #include <cstring>
 #include <thread>
 
+#include "flashbus/clock.hpp"
 #include "flashbus/platform.hpp"
 
 namespace flashbus {
@@ -30,20 +31,27 @@ void Dispatcher::absorb_new_channels() {
 void Dispatcher::run(const std::atomic<bool>& running) {
   if (config_.cpu >= 0) pin_to_cpu(static_cast<unsigned>(config_.cpu));
 
-  size_t idle = 0;
+  const uint64_t spin_ns = uint64_t{config_.idle_spin_us} * 1000;
+  uint64_t idle_since_ns = now_ns();
+  bool was_busy = false;
+
   while (running.load(std::memory_order_relaxed)) {
     if (has_pending_.load(std::memory_order_acquire)) absorb_new_channels();
-    const size_t work = poll_once();
-    if (work != 0) {
-      idle = 0;
+    if (poll_once() != 0) {
+      was_busy = true;
       continue;
     }
-    // Spin first: sleeping here would add the sleep to every event's latency
-    // when traffic resumes. Sleep only once it is clear nothing is coming.
-    if (++idle >= config_.spin_iterations) {
-      idle = config_.spin_iterations;
-      std::this_thread::sleep_for(std::chrono::microseconds(config_.idle_sleep_us));
+    // The clock is read on the first idle iteration after work, never on the
+    // busy path, so routing never pays for the backoff policy.
+    if (was_busy) {
+      idle_since_ns = now_ns();
+      was_busy = false;
+      continue;
     }
+    // Spin before sleeping: this thread has nothing to wait on, so a sleep here
+    // lands directly on the latency of whichever event ends the idle period.
+    if (now_ns() - idle_since_ns < spin_ns) continue;
+    std::this_thread::sleep_for(std::chrono::microseconds(config_.idle_sleep_us));
   }
 }
 

@@ -22,7 +22,7 @@ int main(int argc, char** argv) {
   const flashbus::cli::Args args(argc, argv);
   args.reject_unknown({"port", "ingress-capacity", "egress-capacity", "egress-batch",
                        "adaptive-batching", "policy", "read-buffer", "network-cpu",
-                       "dispatcher-cpu", "spin-iterations", "idle-sleep-us", "quiet", "help"});
+                       "dispatcher-cpu", "idle-spin-us", "idle-sleep-us", "quiet", "help"});
   if (args.flag("help")) {
     std::cout << "usage: flashbus-server [--port N] [--ingress-capacity N] "
                  "[--egress-capacity N]\n"
@@ -30,7 +30,7 @@ int main(int argc, char** argv) {
                  "[--policy drop-newest|disconnect|block]\n"
                  "                       [--read-buffer BYTES] [--network-cpu N] "
                  "[--dispatcher-cpu N]\n"
-                 "                       [--spin-iterations N] [--idle-sleep-us N] [--quiet]\n";
+                 "                       [--idle-spin-us N] [--idle-sleep-us N] [--quiet]\n";
     return 0;
   }
 
@@ -43,7 +43,7 @@ int main(int argc, char** argv) {
   config.read_buffer_bytes = args.number<size_t>("read-buffer", config.read_buffer_bytes);
   config.network_cpu = args.number<int>("network-cpu", -1);
   config.dispatcher_cpu = args.number<int>("dispatcher-cpu", -1);
-  config.spin_iterations = args.number<size_t>("spin-iterations", config.spin_iterations);
+  config.idle_spin_us = args.number<unsigned>("idle-spin-us", config.idle_spin_us);
   config.idle_sleep_us = args.number<unsigned>("idle-sleep-us", config.idle_sleep_us);
 
   const std::string policy_name = args.string("policy", "drop-newest");
