@@ -140,6 +140,11 @@ class Server {
   void stop();
 
   /// The bound port, which matters when `port` was 0 and the kernel chose.
+  ///
+  /// Call this between `start()` and `run()`. It reads the acceptor's local
+  /// endpoint, and an Asio acceptor is owned by whichever thread is running the
+  /// `io_context`; asking it a question from another thread at the same time is
+  /// a data race. Everything else on this class is safe from any thread.
   [[nodiscard]] uint16_t port() const;
   [[nodiscard]] ServerStats stats() const;
 

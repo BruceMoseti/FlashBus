@@ -171,6 +171,12 @@ spins before it parks, so two of them side by side oversubscribe the CPUs and
 the subscribers fall behind — which looks exactly like a dropped-event bug and
 is not one.
 
+For the same reason, the correctness suite sizes its own load: publisher and
+subscriber counts and the paced rate come from `available_cpu_count()`, and
+every test that asserts zero loss paces its publishers. An unpaced burst into a
+bounded egress ring is entitled to drop events, so a test that forbids it is not
+testing delivery, it is testing how fast the machine happens to be.
+
 ## Limits of these numbers
 
 * One machine, one configuration: a shared 8-vCPU KVM guest with no vPMU, no

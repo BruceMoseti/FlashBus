@@ -153,8 +153,11 @@ int main(int argc, char** argv) {
     std::cerr << "flashbus-bench: " << error.what() << '\n';
     return 1;
   }
-  std::thread network_thread([&server] { server.run(); });
+  // Read the port before the network thread starts. port() asks the acceptor
+  // for its local endpoint, and an Asio acceptor is not safe to touch from
+  // two threads at once.
   const uint16_t port = server.port();
+  std::thread network_thread([&server] { server.run(); });
 
   const uint64_t per_producer = options.messages / options.producers;
   const uint64_t total_published = per_producer * options.producers;

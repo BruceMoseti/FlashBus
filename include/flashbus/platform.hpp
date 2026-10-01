@@ -15,7 +15,12 @@ constexpr size_t kCacheLineSize = 64;
 
 struct EnvInfo {
   std::string cpu_model;
+  /// Online CPUs on the machine.
   unsigned cpu_count = 0;
+  /// CPUs this process may run on. Lower than `cpu_count` under a cpuset,
+  /// `taskset` or a container limit — worth recording, because a benchmark that
+  /// was confined to two CPUs of sixteen did not measure the machine.
+  unsigned cpu_available = 0;
   std::string kernel;
   std::string os;
   std::string compiler;
@@ -36,6 +41,15 @@ struct EnvInfo {
 };
 
 const EnvInfo& env_info();
+
+/// CPUs this process is actually allowed to run on.
+///
+/// Not the same as `std::thread::hardware_concurrency()`, which on Linux
+/// reports `sysconf(_SC_NPROCESSORS_ONLN)` — the machine's online CPUs,
+/// ignoring the affinity mask. Under `taskset`, a cpuset, or a container CPU
+/// limit the two disagree, and it is this number that bounds how many runnable
+/// threads a workload can usefully have.
+unsigned available_cpu_count();
 
 /// Pins the calling thread to one logical CPU. Returns false when the
 /// container or cpuset forbids it; callers must treat affinity as advisory.

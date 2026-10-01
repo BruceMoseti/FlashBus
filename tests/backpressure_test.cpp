@@ -18,6 +18,7 @@
 namespace flashbus {
 namespace {
 
+using testing::kPatience;
 using testing::TestBroker;
 
 std::vector<std::byte> payload_of(size_t size) { return std::vector<std::byte>(size, std::byte{7}); }
@@ -55,7 +56,8 @@ TEST(Backpressure, DropNewestLosesEventsAndCountsThem) {
   }
   publisher.flush();
 
-  ASSERT_TRUE(TestBroker::wait_until([&] { return broker.stats().frames_dropped > 0; }, 10.0))
+  ASSERT_TRUE(TestBroker::wait_until(
+[&] { return broker.stats().frames_dropped > 0; }, kPatience))
       << "a stalled subscriber with a 64-frame queue should have caused drops";
 
   const ServerStats stats = broker.stats();
@@ -89,7 +91,7 @@ TEST(Backpressure, DisconnectClosesTheSlowSubscriber) {
         stalled.get().poll([](const MessageHeader&, const std::byte*, size_t) {});
         return !stalled.get().connected();
       },
-      15.0))
+      kPatience))
       << "a stalled subscriber under the disconnect policy was never closed";
 }
 
@@ -106,7 +108,8 @@ TEST(Backpressure, EgressRingNeverExceedsCapacity) {
     publisher.publish(kTopicTrades, payload.data(), payload.size());
   }
   publisher.flush();
-  ASSERT_TRUE(TestBroker::wait_until([&] { return broker.stats().frames_dropped > 0; }, 10.0));
+  ASSERT_TRUE(TestBroker::wait_until(
+[&] { return broker.stats().frames_dropped > 0; }, kPatience));
 
   // The capacity is rounded up to a power of two, so compare against that.
   EXPECT_LE(broker.stats().egress_high_water, 256u);
@@ -139,7 +142,7 @@ TEST(Backpressure, TinyIngressRingThrottlesThePublisherWithoutLoss) {
   });
 
   uint64_t received = 0;
-  const uint64_t deadline = now_ns() + 60'000'000'000;
+  const uint64_t deadline = now_ns() + static_cast<uint64_t>(kPatience * 1e9);
   while (received < kCount && now_ns() < deadline && subscriber.connected()) {
     received += subscriber.poll([](const MessageHeader&, const std::byte*, size_t) {});
   }
@@ -184,7 +187,7 @@ TEST(Backpressure, SlowConsumerDoesNotStallHealthyOnes) {
   });
 
   uint64_t received = 0;
-  const uint64_t deadline = now_ns() + 60'000'000'000;
+  const uint64_t deadline = now_ns() + static_cast<uint64_t>(kPatience * 1e9);
   while (received < kCount && now_ns() < deadline && fast.connected()) {
     received += fast.poll([](const MessageHeader&, const std::byte*, size_t) {});
   }
@@ -225,7 +228,7 @@ TEST(Backpressure, BlockPolicyDoesNotLoseEvents) {
 
   uint64_t received = 0;
   uint64_t expected_sequence = 1;
-  const uint64_t deadline = now_ns() + 30'000'000'000;
+  const uint64_t deadline = now_ns() + static_cast<uint64_t>(kPatience * 1e9);
   while (received < kCount && now_ns() < deadline && subscriber.connected()) {
     received += subscriber.poll([&](const MessageHeader& header, const std::byte*, size_t) {
       EXPECT_EQ(header.sequence, expected_sequence++);
@@ -258,13 +261,21 @@ TEST(Backpressure, GapsAreReportedWhenEventsAreDropped) {
     publisher.publish(kTopicTrades, payload.data(), payload.size());
   }
   publisher.flush();
-  ASSERT_TRUE(TestBroker::wait_until([&] { return broker.stats().frames_dropped > 100; }, 10.0));
+  ASSERT_TRUE(TestBroker::wait_until(
+      [&] { return broker.stats().frames_dropped > 100; }, kPatience));
 
-  const uint64_t deadline = now_ns() + 5'000'000'000;
-  while (now_ns() < deadline) {
-    subscriber.poll([](const MessageHeader&, const std::byte*, size_t) {});
-  }
-  EXPECT_GT(subscriber.gaps(), 0u) << "events were dropped but the subscriber never noticed";
+  // Read until the hole shows up, rather than reading for a fixed five seconds
+  // and hoping that was far enough. This finishes as soon as the property
+  // holds and only takes the full deadline when it is about to fail.
+  const bool saw_gap = TestBroker::wait_until(
+      [&] {
+        subscriber.poll([](const MessageHeader&, const std::byte*, size_t) {});
+        return subscriber.gaps() > 0;
+      },
+      kPatience);
+
+  EXPECT_TRUE(saw_gap) << "events were dropped but the subscriber never noticed";
+  EXPECT_GT(subscriber.gaps(), 0u);
   EXPECT_GT(subscriber.missing(), 0u);
   // Every missing event must be one the broker admits to dropping; a gap the
   // broker cannot account for would mean events vanished somewhere else.

@@ -13,7 +13,8 @@ constexpr const char* kColumns =
     "messages_sent,messages_received,messages_dropped,sequence_gaps,duration_s,"
     "throughput_msg_s,cpu_cores_used,min_ns,p50_ns,p95_ns,p99_ns,p999_ns,max_ns,mean_ns,"
     "heap_allocations,voluntary_ctx_switches,involuntary_ctx_switches,minor_faults,"
-    "major_faults,cpu_model,cpu_count,kernel,os,compiler,compiler_flags,build_type,"
+    "major_faults,cpu_model,cpu_count,cpu_available,kernel,os,compiler,compiler_flags,"
+    "build_type,"
     "sanitizer,boost_version,scaling_governor,hw_pmu_available";
 
 std::string quote(const std::string& field) {
@@ -51,7 +52,8 @@ void ResultWriter::add(const BenchmarkResult& r) {
       << r.p95_ns << ',' << r.p99_ns << ',' << r.p999_ns << ',' << r.max_ns << ',' << r.mean_ns
       << ',' << r.heap_allocations << ',' << r.voluntary_ctx_switches << ','
       << r.involuntary_ctx_switches << ',' << r.minor_faults << ',' << r.major_faults << ','
-      << quote(e.cpu_model) << ',' << e.cpu_count << ',' << quote(e.kernel) << ',' << quote(e.os)
+      << quote(e.cpu_model) << ',' << e.cpu_count << ',' << e.cpu_available << ','
+      << quote(e.kernel) << ',' << quote(e.os)
       << ',' << quote(e.compiler) << ',' << quote(e.compiler_flags) << ',' << quote(e.build_type)
       << ',' << quote(e.sanitizer) << ',' << quote(e.boost_version) << ','
       << quote(e.scaling_governor) << ',' << (e.hw_pmu_available ? 1 : 0) << '\n';
@@ -59,7 +61,8 @@ void ResultWriter::add(const BenchmarkResult& r) {
 
 void print_env(std::ostream& os) {
   const auto& e = env_info();
-  os << "CPU:          " << e.cpu_model << " (" << e.cpu_count << " logical)\n"
+  os << "CPU:          " << e.cpu_model << " (" << e.cpu_count << " logical, "
+     << e.cpu_available << " available to this process)\n"
      << "Kernel:       " << e.kernel << "\n"
      << "OS:           " << e.os << "\n"
      << "Compiler:     " << e.compiler << " [" << e.build_type << "]\n"

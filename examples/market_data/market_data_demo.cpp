@@ -81,8 +81,10 @@ int main(int argc, char** argv) {
 
   Server server(server_config);
   server.start();
-  std::thread network_thread([&server] { server.run(); });
+  // Before the network thread starts: port() touches the acceptor, which the
+  // io thread also owns.
   const uint16_t port = server.port();
+  std::thread network_thread([&server] { server.run(); });
 
   constexpr size_t kMaxLiveOrders = 8192;
   Histogram latency;

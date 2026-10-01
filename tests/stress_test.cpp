@@ -302,7 +302,7 @@ TEST(Stress, EndToEndSoak) {
         }
         return true;
       },
-      30.0);
+      testing::kPatience);
   stop.store(true, std::memory_order_relaxed);
   for (std::thread& thread : readers) thread.join();
 

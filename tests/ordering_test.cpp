@@ -22,7 +22,8 @@ using testing::TestBroker;
 /// Reads until `expected` frames have arrived or the deadline passes, handing
 /// each one to `fn`.
 template <typename Fn>
-size_t drain(Subscriber& subscriber, size_t expected, Fn&& fn, double timeout_s = 10.0) {
+size_t drain(Subscriber& subscriber, size_t expected, Fn&& fn,
+             double timeout_s = testing::kPatience) {
   size_t seen = 0;
   const uint64_t deadline = now_ns() + static_cast<uint64_t>(timeout_s * 1e9);
   while (seen < expected && now_ns() < deadline && subscriber.connected()) {
@@ -39,19 +40,29 @@ std::vector<std::byte> payload_of(uint64_t value, size_t size) {
   return payload;
 }
 
-/// Publishes on its own thread so the test can read while it writes.
+/// Publishes on its own thread, paced, so the test can read while it writes.
 ///
-/// This is not test scaffolding for its own sake: a subscriber that publishes
-/// everything first and only then starts reading is asking the broker to buffer
-/// the whole stream, and FlashBus deliberately does not. Bounded queues mean a
-/// subscriber has to keep up.
+/// Two deliberate choices here, both load-bearing.
+///
+/// It runs on its own thread because a test that publishes everything first and
+/// only then starts reading is asking the broker to buffer the whole stream,
+/// and FlashBus deliberately does not: bounded queues mean a subscriber has to
+/// keep up.
+///
+/// It is paced because these tests assert zero loss, and an unpaced burst into
+/// a bounded egress ring is entitled to lose events — that is the design, not a
+/// bug. The properties under test here are ordering, fan-out and sequence
+/// contiguity, none of which care about the rate. The rate comes from the core
+/// budget so the load fits whatever machine is running it.
 class BackgroundPublisher {
  public:
   template <typename Fn>
-  BackgroundPublisher(uint16_t port, Fn&& body)
-      : thread_([port, body = std::forward<Fn>(body)]() mutable {
+  BackgroundPublisher(uint16_t port, Fn&& body,
+                      uint64_t rate = testing::load_budget().rate_per_publisher)
+      : thread_([port, rate, body = std::forward<Fn>(body)]() mutable {
           Publisher publisher("127.0.0.1", port);
-          body(publisher);
+          const Pacer pacer(rate);
+          body(publisher, pacer);
           publisher.flush();
         }) {}
 
@@ -76,8 +87,9 @@ TEST(EndToEnd, DeliversEveryEventInOrder) {
   subscriber.subscribe(kTopicTrades);
   ASSERT_TRUE(broker.wait_for_subscriptions(1));
 
-  BackgroundPublisher sender(broker.port(), [](Publisher& publisher) {
+  BackgroundPublisher sender(broker.port(), [](Publisher& publisher, const Pacer& pacer) {
     for (uint64_t i = 1; i <= kCount; ++i) {
+      pacer.wait_for(i - 1);
       const auto payload = payload_of(i, 64);
       publisher.publish(kTopicTrades, payload.data(), payload.size());
     }
@@ -117,10 +129,11 @@ TEST(EndToEnd, PreservesOrderAcrossPayloadSizes) {
   // Varying sizes make every frame boundary land somewhere different in the
   // TCP stream, which is where a decoder bug would show up.
   static const std::vector<size_t> sizes = {0, 1, 7, 32, 63, 64, 65, 200, 512, 1024};
-  BackgroundPublisher sender(broker.port(), [](Publisher& publisher) {
+  BackgroundPublisher sender(broker.port(), [](Publisher& publisher, const Pacer& pacer) {
     uint64_t value = 0;
     for (int round = 0; round < 200; ++round) {
       for (const size_t size : sizes) {
+        pacer.wait_for(value);
         const auto payload = payload_of(++value, size);
         publisher.publish(kTopicQuotes, payload.data(), size);
       }
@@ -158,8 +171,9 @@ TEST(EndToEnd, FansOutToEverySubscriber) {
   }
   ASSERT_TRUE(broker.wait_for_subscriptions(3));
 
-  BackgroundPublisher sender(broker.port(), [](Publisher& publisher) {
+  BackgroundPublisher sender(broker.port(), [](Publisher& publisher, const Pacer& pacer) {
     for (uint64_t i = 1; i <= kCount; ++i) {
+      pacer.wait_for(i - 1);
       const auto payload = payload_of(i, 32);
       publisher.publish(kTopicTrades, payload.data(), payload.size());
     }
@@ -169,7 +183,7 @@ TEST(EndToEnd, FansOutToEverySubscriber) {
   // another would leave the others' bounded queues to overflow while they wait.
   std::vector<uint64_t> expected(subscribers.size(), 1);
   std::vector<size_t> seen(subscribers.size(), 0);
-  const uint64_t deadline = now_ns() + 20'000'000'000;
+  const uint64_t deadline = now_ns() + static_cast<uint64_t>(testing::kPatience * 1e9);
   bool done = false;
   while (!done && now_ns() < deadline) {
     done = true;
@@ -340,7 +354,9 @@ TEST(EndToEnd, PublisherDisconnectDoesNotLoseAlreadySentEvents) {
   {
     Publisher publisher("127.0.0.1", broker.port());
     const auto payload = payload_of(7, 48);
+    const Pacer pacer(testing::load_budget().rate_per_publisher);
     for (uint64_t i = 0; i < kCount; ++i) {
+      pacer.wait_for(i);
       publisher.publish(kTopicTrades, payload.data(), payload.size());
     }
     publisher.flush();

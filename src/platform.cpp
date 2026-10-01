@@ -71,6 +71,7 @@ EnvInfo build_env_info() {
   read_cpuinfo(info.cpu_model, info.tsc_constant, info.tsc_nonstop);
   if (info.cpu_model.empty()) info.cpu_model = "unknown";
   info.cpu_count = static_cast<unsigned>(sysconf(_SC_NPROCESSORS_ONLN));
+  info.cpu_available = available_cpu_count();
 
   utsname uts{};
   if (uname(&uts) == 0) {
@@ -127,6 +128,17 @@ EnvInfo build_env_info() {
 const EnvInfo& env_info() {
   static const EnvInfo info = build_env_info();
   return info;
+}
+
+unsigned available_cpu_count() {
+  cpu_set_t set;
+  CPU_ZERO(&set);
+  if (sched_getaffinity(0, sizeof(set), &set) == 0) {
+    const int count = CPU_COUNT(&set);
+    if (count > 0) return static_cast<unsigned>(count);
+  }
+  const long online = sysconf(_SC_NPROCESSORS_ONLN);
+  return online > 0 ? static_cast<unsigned>(online) : 1u;
 }
 
 bool pin_to_cpu(unsigned cpu) {

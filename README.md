@@ -685,10 +685,18 @@ ran" is not "the code is correct"; they answer different questions.
 | `order_book_test` | Event wire round-trip; order lifecycle on both stores; unknown orders reported not swallowed; hash-collision chains; crossed books; pool exhaustion; no allocation in the pooled path; generator self-consistency and id uniqueness |
 | `stress_test` | 20M ring operations with random stalls; bidirectional rings; 200k randomly fragmented frames; pool churn with integrity checks; full-path soak over real sockets with ordering, gap and drop assertions |
 
-Load in the network suites scales with `std::thread::hardware_concurrency()`,
-and the broker in tests does not spin before parking — the suite is verified
-green at 2, 4 and 8 cores under all four configurations, so a CI failure means
-a real defect rather than a small runner.
+The suite is built to be **portable**, so that a red build means a defect
+rather than a small machine. Publisher and subscriber counts and the paced rate
+all derive from `available_cpu_count()` — the affinity mask, not
+`hardware_concurrency()`, which reports the machine's online CPUs and silently
+over-reports inside a cpuset or a container CPU limit. The broker in tests does
+not spin before parking, because correctness tests do not measure latency and
+the spin window only steals cores the load generators need. And every test that
+asserts zero loss paces its publishers, because an unpaced burst into a bounded
+egress ring is *entitled* to lose events — that is the design, and a test that
+forbids it is testing the wrong thing.
+
+Verified green at 2, 4 and 8 cores under all four configurations.
 
 ## Limitations
 

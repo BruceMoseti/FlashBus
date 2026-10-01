@@ -48,6 +48,16 @@ jobs:
       - name: Test
         run: ctest --test-dir build/${{ matrix.preset }} --output-on-failure -j1
 
+      # Without this, a failure on a runner I cannot log into tells me only
+      # which suite failed, not which assertion or which sanitizer report.
+      - name: Upload test log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctest-log-${{ matrix.preset }}
+          path: build/${{ matrix.preset }}/Testing/Temporary/LastTest.log
+          if-no-files-found: warn
+
   # Warnings are errors here but not in the normal build, so that a contributor
   # on a different compiler version is not blocked by a warning this one does
   # not emit.

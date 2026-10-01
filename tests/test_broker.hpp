@@ -12,6 +12,7 @@
 #include <thread>
 
 #include "flashbus/clock.hpp"
+#include "flashbus/platform.hpp"
 #include "flashbus/transport.hpp"
 
 namespace flashbus::testing {
@@ -32,12 +33,31 @@ struct LoadBudget {
   uint64_t rate_per_publisher;
 };
 
+/// How long a test waits for something it expects to happen.
+///
+/// Deliberately generous. These deadlines are not the property under test --
+/// they only bound patience -- so a tight one buys nothing when the test passes
+/// and turns a slow or busy machine into a red build. Under ThreadSanitizer on
+/// a shared CI runner, "slow" can mean an order of magnitude. CTest's own
+/// per-test timeout is the real backstop against a genuine hang.
+constexpr double kPatience = 120.0;
+
 [[nodiscard]] inline LoadBudget load_budget() {
-  const unsigned cores = std::max(2u, std::thread::hardware_concurrency());
+  // available_cpu_count(), not hardware_concurrency(): the latter reports the
+  // machine's online CPUs and ignores the affinity mask, so under a cpuset or a
+  // container CPU limit it over-reports and this budget oversubscribes.
+  const unsigned cores = std::max(2u, available_cpu_count());
   const unsigned spare = cores > 2 ? cores - 2 : 1;  // minus the broker's two
   const unsigned publishers = std::clamp(spare / 2, 1u, 3u);
   const unsigned subscribers = std::clamp(spare - publishers, 1u, 3u);
-  return {publishers, subscribers, 100'000};
+  // The rate scales with the machine too, not just the thread counts. A paced
+  // publisher busy-waits between events, so on a small box the load generators
+  // are already competing with the broker's own two threads; offering 100k
+  // events/s there turns a correctness test into a scheduling experiment.
+  // Every property these tests assert holds at any rate — that is what pacing
+  // is for — so the rate is free to be conservative.
+  const uint64_t rate = cores >= 6 ? 100'000 : (cores >= 4 ? 50'000 : 25'000);
+  return {publishers, subscribers, rate};
 }
 
 class TestBroker {
