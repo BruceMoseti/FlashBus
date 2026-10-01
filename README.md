@@ -25,17 +25,17 @@ read here.
 - **Zero heap allocations** in the steady state over a **300-second, 90-million-event** run with **zero dropped events** and +8% p99 drift — verified by a counting `operator new`, not asserted.
 - **13–144× lower p99** than a `std::mutex` + `std::queue` baseline. The SPSC handoff cost is flat across a 32× payload range (349 ns to 407 ns) where the mutex queue degrades nearly 11× (1.06 µs to 11.3 µs).
 - **1.6 M events/s** fanned out to 4 subscribers with zero loss at 32 µs p50; broker throughput ceiling **5.19 M msg/s** at zero loss.
-- **Clean under ASan, UBSan and TSan** across 8 suites including protocol fuzzing and a full-path soak. ASan found a real out-of-bounds write that every non-sanitised run had passed over.
+- **Clean under ASan, UBSan and TSan** across 91 tests in 8 suites, including protocol fuzzing and a full-path soak. ASan found a real out-of-bounds write that every non-sanitised run had passed over.
 - **Honest measurement**: a `steady_clock` read costs 24.5 ns here — about as much as an SPSC handoff — so benchmarks that would be distorted by it run twice, once with no clock in the loop. No microarchitectural claim is made anywhere, because this host has no PMU.
 
 ### At a glance
 
 | | |
 | --- | --- |
-| **Language** | C++20 (~5,400 lines), Python 3 (tooling) |
+| **Language** | C++20 — 4,855 lines of engine, apps and benchmarks, plus 2,185 lines of tests; Python 3 for tooling |
 | **Core techniques** | Lock-free SPSC ring buffers, non-blocking sockets + reactor loop, cache-line padding, intrusive hashing, preallocated pools, HDR histograms |
-| **Dependencies** | Boost.Asio (sockets only), GoogleTest |
-| **Verified by** | 8 test suites × 4 sanitizer configurations, in CI |
+| **Dependencies** | Boost.Asio (sockets only), GoogleTest. No framework does the interesting part |
+| **Verified by** | 91 tests in 8 suites × 4 sanitizer configurations, in CI |
 | **Measured on** | 8-vCPU Intel Xeon KVM guest, Ubuntu 24.04, g++ 13.3, loopback |
 
 ---
@@ -108,41 +108,48 @@ multiple publishers scale by getting one ingress ring each.
 
 ```mermaid
 flowchart LR
-    subgraph P["Publishers"]
+    subgraph PUB["Publishers"]
         P1["publisher 1"]
         P2["publisher 2"]
         P3["publisher N"]
     end
 
-    subgraph B["FlashBus broker"]
-        direction TB
-        subgraph NET["network thread — owns all sockets"]
-            RD["read() + streaming<br/>frame decoder"]
-            WR["batched write()<br/>per session"]
-        end
-        subgraph DISP["dispatcher thread — owns routing"]
-            DX["topic lookup (array index)<br/>broker sequence number<br/>backpressure policy"]
-        end
-        IQ["ingress SPSC ring<br/>one per connection"]
-        EQ["egress SPSC ring<br/>one per subscriber"]
+    subgraph BROKER["FlashBus broker — 2 threads"]
+        RD["<b>network thread</b><br/>read + streaming<br/>frame decoder"]
+        IQ[["ingress SPSC ring<br/>one per connection"]]
+        DX["<b>dispatcher thread</b><br/>topic lookup by array index<br/>broker sequence number<br/>backpressure policy"]
+        EQ[["egress SPSC ring<br/>one per subscriber"]]
+        WR["<b>network thread</b><br/>batch encode +<br/>one write per batch"]
     end
 
-    subgraph S["Subscribers"]
+    subgraph SUB["Subscribers"]
         S1["subscriber 1"]
         S2["subscriber 2"]
         S3["subscriber M"]
     end
 
-    P1 & P2 & P3 -- "TCP" --> RD
-    RD -- "claim/commit" --> IQ
-    IQ -- "batch drain" --> DX
-    DX -- "fan-out copy" --> EQ
-    EQ -- "batch drain" --> WR
-    WR -- "TCP" --> S1 & S2 & S3
+    P1 --> RD
+    P2 -- "TCP" --> RD
+    P3 --> RD
 
-    RD -.->|"read size bounded by<br/>ring space ⇒ TCP window<br/>closes, no loss"| IQ
-    DX -.->|"ring full ⇒ drop / disconnect / block<br/>counted per subscriber"| EQ
+    RD -- "claim / commit<br/><i>read size bounded by ring space,<br/>so a full ring closes the TCP<br/>window instead of dropping</i>" --> IQ
+    IQ -- "batch drain" --> DX
+    DX -- "fan-out copy<br/><i>full ring ⇒ drop-newest /<br/>disconnect / block,<br/>counted per subscriber</i>" --> EQ
+    EQ -- "batch drain" --> WR
+
+    WR --> S1
+    WR -- "TCP" --> S2
+    WR --> S3
+
+    classDef ring fill:#eef6ff,stroke:#2d6da3,stroke-width:1px
+    classDef thread fill:#f7f7f7,stroke:#555,stroke-width:1px
+    class IQ,EQ ring
+    class RD,DX,WR thread
 ```
+
+Read left to right: the only shared mutable state in the broker is the two
+rings, and the only loss in the system happens at one of the two labelled
+edges — deliberately, at the egress one.
 
 | Owned by | What |
 | --- | --- |

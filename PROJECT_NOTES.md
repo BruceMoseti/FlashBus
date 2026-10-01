@@ -4,8 +4,9 @@ Working notes on FlashBus: why it exists, what was hard, what broke, and what I
 would change. Written for myself and for anyone who wants the reasoning rather
 than the result.
 
-`DESIGN.md` is the semantics contract. `docs/ARCHITECTURE.md` is how it is
-built. `docs/PERFORMANCE.md` is what it measures. This document is the part
+[DESIGN.md](DESIGN.md) is the semantics contract.
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) is how it is built.
+[docs/PERFORMANCE.md](docs/PERFORMANCE.md) is what it measures. This document is the part
 that does not belong in any of those: the decisions, the mistakes, and the
 things I would do differently.
 
